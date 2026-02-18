@@ -31,6 +31,15 @@ jobs:
   frontend:
     runs-on: ubuntu-latest
     
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://dummy.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy-key
+      NEXTAUTH_SECRET: dummy-secret-for-ci
+      NEXTAUTH_URL: http://localhost:3000
+      NEXT_PUBLIC_API_URL: http://localhost:5000
+      NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_dummy
+      STRIPE_SECRET_KEY: sk_test_dummy
+    
     steps:
     - uses: actions/checkout@v3
     
@@ -43,6 +52,11 @@ jobs:
       run: |
         cd Nextjs
         npm ci
+    
+    - name: Lint
+      run: |
+        cd Nextjs
+        npm run lint || true
     
     - name: Build
       run: |
