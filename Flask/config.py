@@ -2,7 +2,13 @@ import os
 from dotenv import load_dotenv
 from datetime import timedelta
 
-load_dotenv('../.flaskenv')
+_here = os.path.dirname(__file__)
+_dotenv_same_dir = os.path.join(_here, '.flaskenv')
+_dotenv_parent = os.path.join(os.path.dirname(_here), '.flaskenv')
+
+# Prefer .flaskenv next to this file; fallback to project-level .flaskenv
+load_dotenv(_dotenv_same_dir)
+load_dotenv(_dotenv_parent, override=False)
 
 class Config:
     SECRET_KEY =  os.environ.get('SECRET_KEY')

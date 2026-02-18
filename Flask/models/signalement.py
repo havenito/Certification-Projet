@@ -8,5 +8,5 @@ class Signalement(db.Model):
     comment_id = db.Column(db.Integer, db.ForeignKey('comments.id'), nullable=True)    
     content = db.Column(db.String(255), nullable=False)
     date_signalement = db.Column(db.DateTime, nullable=False, default=db.func.current_timestamp())
-    statut = db.Column(db.Boolean, default=False)
+    statut = db.Column('status', db.Boolean, default=False)
     report_type = db.Column(db.String(50), nullable=False)

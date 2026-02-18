@@ -5,9 +5,9 @@ class Poll(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     question = db.Column(db.String(255), nullable=False)
     description = db.Column(db.String(1000), nullable=True)
-    options = db.Column(db.PickleType, nullable=False)
+    options = db.Column('option', db.PickleType, nullable=False)
     votes = db.Column(db.PickleType, nullable=False)
-    date_created = db.Column(db.DateTime, nullable=False, default=db.func.current_timestamp())
+    date_created = db.Column('created_at', db.DateTime, nullable=False, default=db.func.current_timestamp())
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=False)
 

@@ -3,6 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import GitHubProvider from "next-auth/providers/github";
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -186,18 +187,24 @@ export const authOptions = {
               pseudoCounter++;
             }
 
+            // Générer un mot de passe aléatoire impossible à deviner pour les utilisateurs OAuth
+            const randomPassword = `oauth_${account.provider}_${crypto.randomUUID()}_${Date.now()}`;
+            
             const { data: newUser, error: insertError } = await supabase
               .from('user')
               .insert([
                 {
                   email: user.email,
+                  password: randomPassword,
                   roles: 'user',
                   first_name: firstName,
                   last_name: lastName,
                   profile_picture: user.image || null,
                   private: false,
                   pseudo: finalPseudo,
-                  subscription: defaultSubscription
+                  subscription: defaultSubscription,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString()
                 },
               ])
               .select('id, email, first_name, last_name, pseudo, profile_picture, private, roles, subscription')
