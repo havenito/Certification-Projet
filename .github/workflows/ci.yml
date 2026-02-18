@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        cd Flask
+        pip install -r requirements.txt
+    
+    - name: Check Python syntax
+      run: |
+        cd Flask
+        python -m py_compile app.py
+
+  frontend:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20'
+    
+    - name: Install dependencies
+      run: |
+        cd Nextjs
+        npm ci
+    
+    - name: Build
+      run: |
+        cd Nextjs
+        npm run build
