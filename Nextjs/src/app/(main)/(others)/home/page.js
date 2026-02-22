@@ -31,6 +31,7 @@ export default function HomePage() {
       description: "Accédez à votre profil pour gérer vos informations, vos posts et vos interactions.",
       href: session?.user?.pseudo ? `/${session.user.pseudo}` : "/profile",
       button: "Voir le profil",
+      isPremium: false,
     },
     {
       icon: faStar,
@@ -38,6 +39,7 @@ export default function HomePage() {
       description: "Débloquez des fonctionnalités exclusives, des thèmes personnalisés et profitez d'une expérience sans publicité.",
       href: "/premium",
       button: "Découvrir Premium",
+      isPremium: true,
     },
     {
       icon: faChartBar,
@@ -45,6 +47,7 @@ export default function HomePage() {
       description: "Participez aux sondages de la communauté ou créez les vôtres pour recueillir des avis.",
       href: "/polls",
       button: "Voir les sondages",
+      isPremium: false,
     },
     {
       icon: faSearch,
@@ -52,6 +55,7 @@ export default function HomePage() {
       description: "Trouvez des utilisateurs, des catégories ou des posts grâce à notre moteur de recherche intelligent.",
       href: "/search",
       button: "Rechercher",
+      isPremium: false,
     },
   ];
 
