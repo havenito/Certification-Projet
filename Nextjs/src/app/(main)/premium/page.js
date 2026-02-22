@@ -57,7 +57,6 @@ export default function PremiumPage() {
   const [notification, setNotification] = useState(null);
   const { data: session, update } = useSession();
 
-  // Afficher les infos utilisateur dans la console
   useEffect(() => {
     if (session?.user) {
       console.group('💎 INFORMATIONS UTILISATEUR - PAGE PREMIUM');
@@ -263,7 +262,6 @@ export default function PremiumPage() {
     setShowCancelModal(false);
   };
 
-  // CORRECTION : Logique simplifiée pour l'affichage du bouton de résiliation
   const hasActiveSubscription = currentPlanId !== 'free';
 
   return (
@@ -311,7 +309,6 @@ export default function PremiumPage() {
           Débloquez plus de fonctionnalités et soutenez la plateforme.
         </p>
         
-        {/* CORRECTION : Simplification de la condition d'affichage */}
         {hasActiveSubscription && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -365,7 +362,6 @@ export default function PremiumPage() {
         ))}
       </motion.div>
 
-      {/* Modal de confirmation de résiliation */}
       <CancelSubscriptionModal
         isOpen={showCancelModal}
         onClose={cancelModal}

@@ -16,7 +16,6 @@ const Card = ({
     normal: { scale: 1, zIndex: 1 },
     selected: { scale: 1.05, zIndex: 10 },
   };
-
   return (
     <motion.div
       variants={cardVariants}
@@ -32,8 +31,7 @@ const Card = ({
               ? 'bg-[#3a3a3a] border-2 border-[#90EE90] cursor-pointer' 
               : 'bg-[#2a2a2a] border border-[#444] cursor-pointer hover:bg-[#333]'
       } ${className}`}
-    >
-      {isCurrent && (
+    >      {isCurrent && (
         <div className="absolute top-2 right-2 bg-[#90EE90] text-black text-sm font-bold px-2 py-1 rounded-full">
           Actuel
         </div>
