@@ -29,7 +29,9 @@ export default function AdminCategoriesPanel() {
   const fetchCategories = async () => {
     setLoading(true);
     const res = await fetch(`${API_URL}/api/categories`);
-    setCategories(await res.json());
+    const data = await res.json();
+    const sortedCategories = data.sort((a, b) => a.name.localeCompare(b.name));
+    setCategories(sortedCategories);
     setLoading(false);
   };
 
