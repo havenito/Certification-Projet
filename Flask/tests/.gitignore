@@ -1,0 +1,33 @@
+# Coverage reports
+.coverage
+htmlcov/
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Test results
+test-results.xml
+junit.xml
+
+# Virtual environment
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# OS
+.DS_Store
+Thumbs.db
