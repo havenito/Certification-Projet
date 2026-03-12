@@ -330,11 +330,14 @@ def update_user(user_id):
             if error_msg:
                 return jsonify({'error': error_msg}), 400
             if validated_file:
-                url, file_type = upload_file(validated_file)
-                if url:
-                    profile_picture_url_to_set = url
-                else:
-                    return jsonify({'error': 'Erreur lors du téléchargement de la photo de profil'}), 500
+                try:
+                    url, file_type = upload_file(validated_file)
+                    if url:
+                        profile_picture_url_to_set = url
+                    else:
+                        return jsonify({'error': 'Erreur lors du téléchargement de la photo de profil'}), 500
+                except ValueError as e:
+                    return jsonify({'error': str(e)}), 400
         elif data_source.get('delete_profile_picture') == 'true':
             profile_picture_url_to_set = None
 
@@ -344,11 +347,14 @@ def update_user(user_id):
             if error_msg:
                 return jsonify({'error': error_msg}), 400
             if validated_file:
-                url, file_type = upload_file(validated_file)
-                if url:
-                    banner_image_url_to_set = url
-                else:
-                    return jsonify({'error': 'Erreur lors du téléchargement de la bannière'}), 500
+                try:
+                    url, file_type = upload_file(validated_file)
+                    if url:
+                        banner_image_url_to_set = url
+                    else:
+                        return jsonify({'error': 'Erreur lors du téléchargement de la bannière'}), 500
+                except ValueError as e:
+                    return jsonify({'error': str(e)}), 400
         elif data_source.get('delete_banner_image') == 'true':
             banner_image_url_to_set = None
 

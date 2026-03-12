@@ -14,6 +14,15 @@ def upload_file(file):
     """Upload a file to Cloudinary and return URL and file type"""
     if not file:
         return None, None
+    
+    # Vérifier la taille du fichier (max 10 MB pour Cloudinary gratuit)
+    file.seek(0, 2) 
+    file_size = file.tell()  
+    file.seek(0)  
+    
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+    if file_size > MAX_FILE_SIZE:
+        raise ValueError(f"Fichier trop volumineux ({file_size / 1024 / 1024:.1f} MB). Maximum : 10 MB.")
         
     file_type = file.content_type
     response = cloudinary.uploader.upload(file, resource_type='auto')

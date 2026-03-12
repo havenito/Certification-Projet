@@ -16,6 +16,10 @@ def create_signalement():
     content = data.get('content')
     if not user_id or not content or not report_type:
         return jsonify({'error': 'Missing fields'}), 400
+    
+    # Convertir report_type en minuscules pour correspondre à l'ENUM PostgreSQL
+    report_type = report_type.lower() if report_type else None
+    
     signalement = Signalement(
         user_id=user_id,
         post_id=post_id,
