@@ -36,13 +36,14 @@ const subscriptionPlans = [
   },
   {
     id: 'premium',
-    name: 'Minouverse Premium✨',
-    description: 'L\'expérience complète sans compromis.',
+    name: 'Minouverse Premium ✨',
+    description: 'Le meilleur de Minouverse pour les membres qui veulent se démarquer.',
     price: '9.99€',
     features: [
       'Tout de Minouverse Plus',
-      'Badge "Premium" exclusif',
-      'Choix de thèmes personnalisés (A venir)',
+      'Badge "Premium" exclusif et prioritaire',
+      'Accès anticipé aux nouveautés Premium',
+      'Choix de thèmes personnalisés (à venir)',
     ],
   },
 ];

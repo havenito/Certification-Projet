@@ -12,6 +12,7 @@ const Card = ({
   className = '', 
   isDisabled = false 
 }) => {
+  const isPremiumPlan = plan.id === 'premium';
   const cardVariants = {
     normal: { scale: 1, zIndex: 1 },
     selected: { scale: 1.05, zIndex: 10 },
@@ -22,7 +23,7 @@ const Card = ({
       animate={isSelected ? 'selected' : 'normal'}
       transition={{ duration: 0.3, ease: 'easeInOut' }}
       onClick={!isCurrent && !isDisabled ? onClick : undefined}
-      className={`relative flex flex-col p-6 rounded-xl shadow-lg transition-colors duration-300 ${
+      className={`relative flex flex-col p-6 rounded-2xl shadow-lg transition-all duration-300 overflow-hidden ${
         isCurrent 
           ? 'bg-[#3a3a3a] border-2 border-[#90EE90] cursor-default' 
           : isDisabled 
@@ -44,8 +45,21 @@ const Card = ({
         </div>
       )}
 
+      {isPremiumPlan && !isCurrent && !isDisabled && (
+        <>
+          <div className="absolute -top-16 -right-16 h-36 w-36 rounded-full bg-yellow-400/20 blur-2xl" />
+          <div className="absolute -bottom-16 -left-16 h-36 w-36 rounded-full bg-amber-300/15 blur-2xl" />
+        </>
+      )}
+
       <h3 className={`text-2xl font-bold mb-4 ${
-        isSelected || isCurrent ? 'text-[#90EE90]' : isDisabled ? 'text-gray-500' : 'text-white'
+        isPremiumPlan && !isDisabled
+          ? 'text-yellow-300'
+          : isSelected || isCurrent
+            ? 'text-[#90EE90]'
+            : isDisabled
+              ? 'text-gray-500'
+              : 'text-white'
       }`}>
         {plan.name}
       </h3>
@@ -53,12 +67,22 @@ const Card = ({
       <p className={`mb-4 ${isDisabled ? 'text-gray-500' : 'text-gray-400'}`}>
         {plan.description}
       </p>
+
+      {isPremiumPlan && !isDisabled && (
+        <p className="mb-4 text-sm font-semibold text-yellow-200/90">
+          Plus de visibilité, une identité unique, et les nouveautés en avant-première.
+        </p>
+      )}
       
       <div className="mb-6">
-        <span className={`text-4xl font-extrabold ${isDisabled ? 'text-gray-500' : 'text-white'}`}>
+        <span className={`text-4xl font-extrabold ${
+          isDisabled ? 'text-gray-500' : isPremiumPlan ? 'text-yellow-100' : 'text-white'
+       }`}>
           {plan.price}
         </span>
-        <span className={`${isDisabled ? 'text-gray-600' : 'text-gray-500'}`}>/mois</span>
+        <span className={`${isDisabled ? 'text-gray-600' : isPremiumPlan ? 'text-yellow-200/70' : 'text-gray-500'}`}>
+          /mois
+        </span>
       </div>
       
       <ul className={`space-y-2 mb-6 flex-grow ${isDisabled ? 'text-gray-500' : 'text-gray-300'}`}>
@@ -66,7 +90,9 @@ const Card = ({
           <li key={index} className="flex items-center">
             <FontAwesomeIcon 
               icon={faCheckCircle} 
-              className={`mr-2 ${isDisabled ? 'text-gray-600' : 'text-[#90EE90]'}`} 
+              className={`mr-2 ${
+                isDisabled ? 'text-gray-600' : isPremiumPlan ? 'text-yellow-300' : 'text-[#90EE90]'
+              }`} 
             />
             {feature}
           </li>
@@ -92,6 +118,8 @@ const Card = ({
               ? 'bg-[#333] text-gray-500 cursor-not-allowed opacity-50'
               : plan.id === 'free'
                 ? 'bg-[#444] text-gray-300 cursor-not-allowed opacity-50'
+                : isPremiumPlan
+                  ? 'bg-gradient-to-r from-yellow-300 to-amber-400 text-black hover:from-yellow-200 hover:to-amber-300 shadow-lg shadow-amber-400/25'
                 : isSelected
                   ? 'bg-[#90EE90] text-black hover:bg-[#7CD37C]'
                   : 'bg-[#444] text-gray-300 hover:bg-[#555] hover:text-white'
@@ -102,7 +130,9 @@ const Card = ({
             ? 'Résilier d\'abord votre abonnement' 
             : plan.id === 'free' 
               ? 'Gratuit' 
-              : 'Souscrire à l\'abonnement'
+              : isPremiumPlan
+                ? 'Passer au Premium'
+                : 'Souscrire à l\'abonnement'
           }
         </button>
       )}
