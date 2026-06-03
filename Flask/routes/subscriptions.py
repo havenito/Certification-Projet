@@ -219,6 +219,89 @@ def handle_payment_succeeded(invoice):
         current_app.logger.error(f"Erreur lors de la mise à jour du paiement: {e}")
         raise
 
+def handle_subscription_updated(sub):
+    """Gérer la mise à jour d'un abonnement Stripe (ex: changement de statut ou de période)"""
+    try:
+        stripe_sub_id = sub.get('id')
+        if not stripe_sub_id:
+            current_app.logger.error('handle_subscription_updated: id manquant dans le payload')
+            return
+
+        subscription_db = Subscription.query.filter_by(stripe_subscription_id=stripe_sub_id).first()
+        if not subscription_db:
+            current_app.logger.info(f"Subscription {stripe_sub_id} non trouvée en base")
+            return
+
+        # Mettre à jour le status et les dates si présentes
+        status = sub.get('status')
+        current_period_start = sub.get('current_period_start')
+        current_period_end = sub.get('current_period_end')
+
+        if status:
+            try:
+                validate_subscription_status(status)
+                subscription_db.status = status
+            except ValueError:
+                current_app.logger.warning(f"Statut inconnu reçu: {status}")
+
+        # Stripe fournit des timestamps en secondes parfois
+        try:
+            if current_period_start:
+                subscription_db.current_period_start = datetime.utcfromtimestamp(int(current_period_start))
+            if current_period_end:
+                subscription_db.current_period_end = datetime.utcfromtimestamp(int(current_period_end))
+        except Exception:
+            # si ce sont des ISO strings, on ignore l'exception
+            pass
+
+        # Mettre à jour l'utilisateur local si le plan est stocké
+        user = User.query.get(subscription_db.user_id)
+        if user and subscription_db.plan:
+            try:
+                validate_subscription_type(subscription_db.plan)
+                user.update_subscription(subscription_db.plan, commit=False)
+            except ValueError:
+                current_app.logger.warning(f"Plan inconnu en base pour subscription {stripe_sub_id}: {subscription_db.plan}")
+
+        db.session.commit()
+        current_app.logger.info(f"Subscription {stripe_sub_id} mise à jour en base")
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur handle_subscription_updated: {e}")
+        raise
+
+
+def handle_subscription_deleted(sub):
+    """Gérer la suppression d'un abonnement Stripe (marquer canceled locally)"""
+    try:
+        stripe_sub_id = sub.get('id')
+        if not stripe_sub_id:
+            current_app.logger.error('handle_subscription_deleted: id manquant dans le payload')
+            return
+
+        subscription_db = Subscription.query.filter_by(stripe_subscription_id=stripe_sub_id).first()
+        if not subscription_db:
+            current_app.logger.info(f"Subscription {stripe_sub_id} non trouvée en base lors d'une suppression")
+            return
+
+        subscription_db.status = 'canceled'
+        subscription_db.current_period_end = datetime.utcnow()
+
+        user = User.query.get(subscription_db.user_id)
+        if user:
+            old = user.subscription
+            user.subscription = 'free'
+            current_app.logger.info(f"Utilisateur {user.id} passé de '{old}' à 'free' suite à suppression Stripe")
+
+        db.session.commit()
+        current_app.logger.info(f"Subscription {stripe_sub_id} marquée annulée en base")
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Erreur handle_subscription_deleted: {e}")
+        raise
+
 @subscriptions_bp.route('/api/user/<int:user_id>/subscription', methods=['GET'])
 def get_user_subscription(user_id):
     """Récupérer l'abonnement actuel d'un utilisateur"""
