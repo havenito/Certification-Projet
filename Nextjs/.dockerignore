@@ -1,0 +1,30 @@
+# Fichiers à exclure du contexte de build Docker
+ 
+# Dépendances (réinstallées dans l'image)
+node_modules/
+npm-debug.log*
+ 
+# Build Next.js
+.next/
+out/
+ 
+# Variables d'environnement (ne jamais inclure dans l'image)
+.env
+.env.local
+.env.development
+.env.production
+*.env
+ 
+# IDE
+.vscode/
+.idea/
+ 
+# Git
+.git/
+.gitignore
+ 
+# Fichiers de test
+*.test.js
+*.spec.js
+__tests__/
+ 

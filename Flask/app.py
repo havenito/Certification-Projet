@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from flask_bcrypt import Bcrypt
@@ -58,7 +58,7 @@ def create_app(config_class=Config):
     app.register_blueprint(bp_signalement) 
     app.register_blueprint(warn_bp)
     app.register_blueprint(classement_bp)
-
+    
     socketio = init_socketio(app)
 
     with app.app_context():
@@ -70,9 +70,13 @@ def create_app(config_class=Config):
         from models.subscription import Subscription
         from models.favorite import Favorite
         db.create_all()
+
+    @app.route('/api/health')
+    def health():
+        return jsonify({"status": "ok"}), 200    
     
     return app, socketio
 
 if __name__ == '__main__':
     app, socketio = create_app()
-    socketio.run(app, debug=True, host='0.0.0.0', port=5000)
+    socketio.run(app, debug=True, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)

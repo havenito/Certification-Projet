@@ -1,0 +1,37 @@
+# Fichiers à exclure du contexte de build Docker
+ 
+# Environnement Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+ 
+# Variables d'environnement (ne jamais inclure dans l'image)
+.env
+.flaskenv
+*.env
+ 
+# Tests (inutiles en production)
+tests/
+pytest.ini
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+ 
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+ 
+# Git
+.git/
+.gitignore

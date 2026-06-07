@@ -1,0 +1,31 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  docker-compose.dev.yml – Override pour le développement avec hot reload
+#
+#  Usage :
+#    docker-compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+# ─────────────────────────────────────────────────────────────────────────────
+ 
+services:
+ 
+  backend:
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+    volumes:
+      - ./Flask:/app
+      - /app/__pycache__
+    # Redémarre Flask automatiquement à chaque modification de fichier .py
+    command: ["python", "-u", "app.py"]
+ 
+  frontend:
+    build:
+      target: deps
+    volumes:
+      - ./Nextjs:/app
+      - /app/node_modules
+      - /app/.next
+    # Lance Next.js en mode dev avec Turbopack pour le hot reload
+    command: ["npm", "run", "dev"]
+    environment:
+      - NODE_ENV=development
+ 
