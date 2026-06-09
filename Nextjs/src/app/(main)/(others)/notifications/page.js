@@ -39,8 +39,8 @@ export default function NotificationsPage() {
       
       const data = await response.json();
             
-      // Filtrer pour ne garder que les types autorisés
-      const allowedTypes = ['follow', 'follow_request', 'follow_request_accepted', 'comment', 'reply', 'reply_to_reply'];
+      // Autorise le type 'mention' dans l'application
+      const allowedTypes = ['follow', 'follow_request', 'follow_request_accepted', 'comment', 'reply', 'reply_to_reply', 'mention'];
       const filteredData = data.filter(notification => 
         allowedTypes.includes(notification.type)
       );
@@ -71,7 +71,8 @@ export default function NotificationsPage() {
         case 'follows':
           return ['follow', 'follow_request', 'follow_request_accepted'].includes(notification.type);
         case 'comments':
-          return ['comment', 'reply', 'reply_to_reply'].includes(notification.type);
+          // On inclut les mentions dans l'onglet des commentaires
+          return ['comment', 'reply', 'reply_to_reply', 'mention'].includes(notification.type);
         case 'all':
         default:
           return true;
@@ -127,7 +128,6 @@ export default function NotificationsPage() {
       );
       
       if (response.ok) {
-        // Supprimer la notification de demande de suivi après action
         setNotifications(prev => prev.filter(n => n.follow_id !== followId));
         
         const message = action === 'accept' ? 'Demande acceptée' : 'Demande rejetée';
@@ -154,7 +154,7 @@ export default function NotificationsPage() {
       label: 'Commentaires', 
       icon: faComment, 
       count: notifications.filter(n => 
-        ['comment', 'reply', 'reply_to_reply'].includes(n.type)
+        ['comment', 'reply', 'reply_to_reply', 'mention'].includes(n.type)
       ).length 
     }
   ];

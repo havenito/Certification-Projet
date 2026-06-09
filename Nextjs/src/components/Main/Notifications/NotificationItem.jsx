@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faUserPlus, faComment, faReply, faCheck, faTimes, faTrash, faUserCheck } from '@fortawesome/free-solid-svg-icons';
+import { faUserPlus, faComment, faReply, faCheck, faTimes, faTrash, faUserCheck, faAt } from '@fortawesome/free-solid-svg-icons';
 import Image from 'next/image';
 import Link from 'next/link';
 
@@ -35,6 +35,8 @@ const NotificationItem = ({ notification, currentUser, onDelete, onFollowRequest
         return { icon: faUserCheck, color: 'text-green-400', bg: 'bg-green-500/20' };
       case 'comment':
         return { icon: faComment, color: 'text-purple-400', bg: 'bg-purple-500/20' };
+      case 'mention':
+        return { icon: faAt, color: 'text-green-400', bg: 'bg-green-500/20' };
       case 'reply':
       case 'reply_to_reply':
         return { icon: faReply, color: 'text-orange-400', bg: 'bg-orange-500/20' };
@@ -60,6 +62,8 @@ const NotificationItem = ({ notification, currentUser, onDelete, onFollowRequest
         return `${actorName} a accepté votre demande d'abonnement`;
       case 'comment':
         return `${actorName} a commenté votre post`;
+      case 'mention':
+        return `${actorName} vous a mentionné dans un post`;
       case 'reply':
         return `${actorName} a répondu à votre commentaire`;
       case 'reply_to_reply':
@@ -192,7 +196,7 @@ const NotificationItem = ({ notification, currentUser, onDelete, onFollowRequest
               )}
               
               <p className="text-gray-500 text-xs mt-2">
-                {formatDate(notification.date)}
+                {formatDate(notification.created_at || notification.date)}
               </p>
             </div>
 

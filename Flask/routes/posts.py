@@ -77,6 +77,36 @@ def create_post():
         
         db.session.commit()
         
+        # ── BLOC DES MENTIONS CORRIGÉ ET SÉCURISÉ ──
+        import re
+        from models.notification import Notification
+        
+        # Extraction de tous les mots commençant par @
+        mentions = re.findall(r'@(\w+)', content)
+        
+        for pseudo in set(mentions): 
+            # Utilisation de .ilike() pour ignorer les problèmes de majuscules/minuscules
+            mentioned_user = User.query.filter(User.pseudo.ilike(pseudo)).first()
+            
+            if mentioned_user:
+                # Nettoyage et conversion des IDs pour éviter les faux négatifs de types (int vs str)
+                id_mentionne = str(mentioned_user.id).strip()
+                id_auteur = str(user_id).strip()
+                
+                # Vérification que l'auteur ne s'auto-mentionne pas
+                if id_mentionne != id_auteur:
+                    notif = Notification(
+                        user_id=mentioned_user.id,
+                        post_id=post.id,
+                        type='mention'
+                    )
+                    db.session.add(notif)
+                    print(f"[NOTIF SUCCESS] Notification créée pour @{mentioned_user.pseudo}")
+        
+        # Validation finale des notifications en BDD
+        db.session.commit()
+        # ──────────────────────────────────────────
+
         return jsonify({
             'message': 'Post created successfully', 
             'post_id': post.id,
@@ -88,6 +118,60 @@ def create_post():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Failed to create post: {str(e)}'}), 500
+    
+@posts_bp.route('/api/user_notifications/<int:user_id>', methods=['GET'])
+def get_user_notifications(user_id):
+    try:
+        from models.notification import Notification
+        from models.user import User
+        from models.post import Post
+
+        notifications = Notification.query.filter_by(user_id=user_id).order_by(Notification.id.desc()).all()
+        
+        result = []
+        for n in notifications:
+            post_data = None
+            post_author = None
+            
+            if n.post_id:
+                post = Post.query.get(n.post_id)
+                if post:
+                    post_author = User.query.get(post.user_id) if hasattr(post, 'user_id') else None
+                    post_data = {
+                        'id': post.id,
+                        'user_pseudo': post_author.pseudo if post_author else "user"
+                    }
+
+            if post_author:
+                actor = post_author
+            else:
+                actor_id = None
+                for attr in ['sender_id', 'actor_id', 'creator_id']:
+                    if hasattr(n, attr) and getattr(n, attr):
+                        actor_id = getattr(n, attr)
+                        if actor_id != user_id:
+                            break
+                actor = User.query.get(actor_id) if actor_id else None
+
+            result.append({
+                'id': n.id,
+                'post_id': n.post_id,
+                'type': n.type,
+                'created_at': n.created_at.isoformat() if hasattr(n, 'created_at') and n.created_at else None,
+                'post_data': post_data,  
+                'actor_user': {
+                    'pseudo': actor.pseudo if actor else "Stripe",
+                    'first_name': actor.first_name if actor else "STRIPE",
+                    'last_name': actor.last_name if actor else "STRIPE",
+                    'profile_picture': actor.profile_picture if actor and hasattr(actor, 'profile_picture') else None,
+                    'subscription': actor.subscription if actor and hasattr(actor, 'subscription') else 'free'
+                }
+            })
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        return jsonify({'error': f'Erreur backend: {str(e)}'}), 500
 
 @posts_bp.route('/api/update_post/<int:post_id>', methods=['PUT', 'POST'])
 def update_post(post_id):
@@ -229,7 +313,6 @@ def get_all_posts():
         
         for post in posts:
             user = User.query.get(post.user_id)
-            
             category = Category.query.get(post.category_id)
             
             from models.post_media import PostMedia
@@ -313,7 +396,7 @@ def get_user_posts(user_id):
             
             likes_count = Like.query.filter_by(post_id=post.id).count()
             comments_count = Comment.query.filter_by(post_id=post.id).count() 
-                 
+                     
             result.append({
                 'id': post.id,
                 'title': post.title,
@@ -362,7 +445,6 @@ def get_foryou_posts():
         result = []
         for post in posts.items:
             user = User.query.get(post.user_id)
-            
             category = Category.query.get(post.category_id)
             
             from models.post_media import PostMedia
@@ -436,7 +518,6 @@ def get_following_posts(user_id):
         result = []
         for post in posts.items:
             user = User.query.get(post.user_id)
-            
             category = Category.query.get(post.category_id)
             
             from models.post_media import PostMedia

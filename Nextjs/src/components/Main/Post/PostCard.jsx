@@ -62,6 +62,30 @@ const PostCard = ({ post, disableNavigation = false }) => {
     setShowMediaModal(true);
   };
 
+  // ── COUPE ET COLORE LES MENTIONS @PSEUDO (AJOUTÉ) ───────────────────────
+  const renderContentWithMentions = (content) => {
+    if (!content) return '';
+    const parts = content.split(/(@\w+)/g);
+    return parts.map((part, index) => {
+      if (part.startsWith('@')) {
+        const pseudo = part.slice(1);
+        return (
+          <Link
+            key={index}
+            href={`/${pseudo}`}
+            className="text-green-400 hover:underline font-medium"
+            onClick={(e) => e.stopPropagation()}
+            data-interactive="true"
+          >
+            {part}
+          </Link>
+        );
+      }
+      return part;
+    });
+  };
+  // ───────────────────────────────────────────────────────────────────────
+
   const renderMedia = () => {
     const allMedia = Array.isArray(post.media) ? post.media : [];
     
@@ -278,7 +302,10 @@ const PostCard = ({ post, disableNavigation = false }) => {
           <h3 className="text-white font-semibold text-lg mb-2">{post.title}</h3>
         )}
         
-        <p className="text-white whitespace-pre-wrap leading-relaxed mb-3">{post.content}</p>
+        {/* LE RENDU DES MENTIONS EST APPLIQUÉ ICI */}
+        <p className="text-white whitespace-pre-wrap leading-relaxed mb-3">
+          {renderContentWithMentions(post.content)}
+        </p>
         
         {renderMedia()}
         

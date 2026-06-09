@@ -877,3 +877,4 @@ def get_user_ban_status(user_id):
         
     except Exception as e:
         return jsonify({'error': f'Erreur lors de la vérification du statut: {str(e)}'}), 500
+    

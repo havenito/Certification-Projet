@@ -29,6 +29,33 @@ const PostCardDetail = ({ post }) => {
     }
   };
 
+  // Fonction pour colorer les mentions (@pseudo) en vert fluo et les rendre cliquables
+  const formatPostContent = (content) => {
+    if (!content) return "";
+
+    const mentionRegex = /(@[a-zA-Z0-9_-]+)/g;
+    const parts = content.split(mentionRegex);
+
+    return parts.map((part, index) => {
+      if (part.startsWith('@')) {
+        const pseudo = part.substring(1);
+        return (
+          <span 
+            key={index} 
+            className="text-[#90EE90] font-semibold hover:underline cursor-pointer transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              window.location.href = `/${pseudo}`;
+            }}
+          >
+            {part}
+          </span>
+        );
+      }
+      return part;
+    });
+  };
+
   const handleMediaClick = (index, e) => {
     e.stopPropagation();
     setSelectedMediaIndex(index);
@@ -256,8 +283,9 @@ const PostCardDetail = ({ post }) => {
             </h1>
           )}
           
+          {/* Modification ici pour appliquer le formatage vert de la mention */}
           <div className="text-white text-lg leading-relaxed whitespace-pre-wrap mb-4">
-            {post.content}
+            {formatPostContent(post.content)}
           </div>
           
           {renderMedia()}

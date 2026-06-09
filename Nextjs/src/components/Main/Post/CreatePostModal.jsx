@@ -31,6 +31,14 @@ const CreatePostModal = ({ isOpen, onClose, onPostCreated }) => {
   const [showNotification, setShowNotification] = useState(false);
   const fileInputRef = useRef(null);
 
+  // ── SÉLECTION DES MENTIONS (AJOUTÉ) ────────────────────────────────
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [mentionResults, setMentionResults] = useState([]);
+  const [showMentions, setShowMentions] = useState(false);
+  const [cursorPosition, setCursorPosition] = useState(0);
+  const textareaRef = useRef(null);
+  // ───────────────────────────────────────────────────────────────────
+
   // Chargement des catégories
   useEffect(() => {
     const fetchCategories = async () => {
@@ -75,6 +83,9 @@ const CreatePostModal = ({ isOpen, onClose, onPostCreated }) => {
     setMediaFiles([]);
     setMediaPreviews([]);
     setError('');
+    // Reset aussi les mentions
+    setShowMentions(false);
+    setMentionResults([]);
   };
 
   const handleClose = () => {
@@ -83,6 +94,58 @@ const CreatePostModal = ({ isOpen, onClose, onPostCreated }) => {
       onClose();
     }
   };
+
+  // ── FONCTIONS DE DÉTECTION DES MENTIONS (AJOUTÉ) ──────────────────────
+  const handleContentChange = async (e) => {
+    const value = e.target.value;
+    const cursor = e.target.selectionStart;
+    setContent(value);
+    setCursorPosition(cursor);
+
+    // Cherche le dernier @ avant le curseur
+    const textBeforeCursor = value.slice(0, cursor);
+    const mentionMatch = textBeforeCursor.match(/@(\w*)$/);
+
+    if (mentionMatch) {
+      const query = mentionMatch[1];
+      setMentionQuery(query);
+      setShowMentions(true);
+
+      if (query.length >= 1) {
+        try {
+          const res = await fetch(
+            `${process.env.NEXT_PUBLIC_FLASK_API_URL}/api/users/search-mention?q=${query}`
+          );
+          const data = await res.json();
+          setMentionResults(data);
+        } catch (err) {
+          console.error('Erreur recherche mention:', err);
+        }
+      } else {
+        setMentionResults([]);
+      }
+    } else {
+      setShowMentions(false);
+      setMentionResults([]);
+    }
+  };
+
+  const insertMention = (pseudo) => {
+    const textBeforeCursor = content.slice(0, cursorPosition);
+    const textAfterCursor = content.slice(cursorPosition);
+        
+    // Remplace le @query en cours par @pseudo complet + espace
+    const newText = textBeforeCursor.replace(/@(\w*)$/, `@${pseudo} `) + textAfterCursor;
+    setContent(newText);
+    setShowMentions(false);
+    setMentionResults([]);
+    
+    // Remet le focus sur le champ de texte
+    setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 50);
+  };
+  // ───────────────────────────────────────────────────────────────────
 
   const handleMediaChange = (e) => {
     const files = Array.from(e.target.files);
@@ -294,11 +357,13 @@ const CreatePostModal = ({ isOpen, onClose, onPostCreated }) => {
                     <FontAwesomeIcon icon={faSignature} className="text-[#90EE90] mr-2" />
                     Contenu
                   </label>
+                  {/* TEXTAREA AJUSTÉ AVEC LA REF ET LE CHANGEMENT DE FONCTION ONCHANGE */}
                   <textarea
-                    placeholder="Que voulez-vous partager ?"
+                    ref={textareaRef}
+                    placeholder="Que voulez-vous partager ? Utilisez @ pour mentionner quelqu'un..."
                     value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    className="w-full bg-[#333] text-white placeholder-gray-400 text-lg border border-[#555] rounded-lg px-3 py-3 outline-none focus:border-[#90EE90] transition-colors resize-none min-h-[120px]"
+                    onChange={handleContentChange}
+                    className="w-full bg-[#333] text-white placeholder-gray-400 text-lg border border-[#555] rounded-lg px-3 py-3 pr-12 outline-none focus:border-[#90EE90] transition-colors resize-none min-h-[120px]"
                     maxLength={maxChars}
                     required
                   />
@@ -307,6 +372,36 @@ const CreatePostModal = ({ isOpen, onClose, onPostCreated }) => {
                   }`}>
                     {remainingChars}
                   </div>
+
+                  {/* LISTE DES SUGGESTIONS DE MENTIONS AJOUTÉE ICI (S'ADAPTE AU STYLE SOMBRE DE TON APPLICATION) */}
+                  {showMentions && mentionResults.length > 0 && (
+                    <div className="absolute z-50 bg-[#222] border border-[#44] rounded-xl shadow-2xl w-64 mt-1 max-h-60 overflow-y-auto left-0 top-[100%]">
+                      {mentionResults.map((user) => (
+                        <button
+                          key={user.id}
+                          type="button"
+                          onClick={() => insertMention(user.pseudo)}
+                          className="flex items-center gap-3 w-full px-4 py-3 hover:bg-[#333] transition-colors text-left"
+                        >
+                          {user.profile_picture ? (
+                            <img
+                              src={user.profile_picture}
+                              alt={user.pseudo}
+                              className="w-8 h-8 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center text-white text-sm font-bold">
+                              {user.first_name?.[0]?.toUpperCase() || user.pseudo?.[0]?.toUpperCase()}
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-white text-sm font-medium">{user.first_name || user.pseudo}</p>
+                            <p className="text-gray-400 text-xs">@{user.pseudo}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {mediaPreviews.length > 0 && (

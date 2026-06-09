@@ -19,3 +19,20 @@ def search_categories():
         return jsonify({'categories': []})
     categories = Category.query.filter(Category.name.ilike(f"%{query}%")).all()
     return jsonify({'categories': [ {"id": c.id, "name": c.name} for c in categories ]})
+
+@search_bp.route('/api/users/search-mention', methods=['GET'])
+def search_mention():
+    query = request.args.get('q', '')
+    if len(query) < 1:
+        return jsonify([])
+    
+    users = User.query.filter(
+        User.pseudo.ilike(f'{query}%')
+    ).limit(5).all()
+    
+    return jsonify([{
+        'id': u.id,
+        'pseudo': u.pseudo,
+        'profile_picture': u.profile_picture,
+        'first_name': u.first_name
+    } for u in users])
