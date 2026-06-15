@@ -251,18 +251,20 @@ python -m pytest tests/ -v --cov=. --cov-report=term
 ---
  
 ## ✨ Fonctionnalités principales
- 
+
 - 🔐 **Authentification** – Inscription manuelle + OAuth Google & GitHub (NextAuth)
 - 📝 **Publications (Miaous)** – Texte, images, vidéos, GIFs via Cloudinary
 - 💬 **Messagerie temps réel** – Chat privé 1-to-1 via Socket.IO
 - 👥 **Système social** – Follows, likes, commentaires, réponses imbriquées, favoris
 - 📊 **Sondages** – Création et vote avec résultats en temps réel
 - 💎 **Abonnements premium** – Free / Plus (4,99€/mois) / Premium (9,99€/mois) via Stripe
-- 🔔 **Notifications** – Temps réel pour likes, commentaires, follows, messages
+- 🔔 **Notifications** – Temps réel pour likes, commentaires, follows, messages et mentions
 - 🔍 **Recherche** – Utilisateurs et catégories
 - 🏆 **Classement** – Publications et créateurs les plus populaires
 - 🛡️ **Panel admin** – Modération, signalements, avertissements, bannissements
 - 📱 **Responsive** – Design mobile-first avec Tailwind CSS
+- @ **Mentions** – Autocomplétion @pseudo lors de la rédaction avec notification automatique
+- 🐳 **Docker** – Environnement conteneurisé, lancement en une commande
 ---
  
 ## 📦 Stack technique
@@ -290,16 +292,17 @@ python -m pytest tests/ -v --cov=. --cov-report=term
 ---
  
 ## 🔄 CI/CD – GitHub Actions
- 
+
 Le pipeline CI/CD s'exécute automatiquement à chaque push sur `main`.
-Il comporte quatre jobs :
- 
-| Job                  | Durée | Description                                      |
-|----------------------|-------|--------------------------------------------------|
-| Tests Unitaires      | ~29s  | `pytest tests/test_unit_*.py` sur Python 3.11   |
-| Tests d'Intégration  | ~28s  | `pytest tests/test_integration_*.py`            |
-| Backend Syntax Check | ~11s  | Vérification syntaxique `py_compile app.py`     |
-| Frontend Build       | ~57s  | `npm run build` sur Node.js 20                  |
+Il comporte cinq jobs :
+
+| Job                        | Durée  | Description                                               |
+|----------------------------|--------|-----------------------------------------------------------|
+| Tests Unitaires            | ~29s   | `pytest tests/test_unit_*.py` sur Python 3.11            |
+| Tests d'Intégration        | ~28s   | `pytest tests/test_integration_*.py`                     |
+| Backend Syntax Check       | ~11s   | Vérification syntaxique `py_compile app.py`              |
+| Frontend Build             | ~57s   | `npm run build` sur Node.js 20                           |
+| Docker Build & Health Check| ~2-3min| Build des images, démarrage des conteneurs, vérification réelle de `/api/health` et du port 3000 |
  
 ---
  
