@@ -7,8 +7,12 @@ search_bp = Blueprint('search', __name__)
 @search_bp.route('/api/users/search', methods=['GET'])
 def search_users():
     query = request.args.get('q', '')
+    
+    # Si le champ de recherche est vide, on renvoie une liste vide direct pour économiser la BDD
     if not query:
         return jsonify({'users': []})
+        
+    # Le ilike permet de chercher sans bloquer sur les majuscules/minuscules, et les % cherchent n'importe où dans le pseudo
     users = User.query.filter(User.pseudo.ilike(f"%{query}%")).all()
     return jsonify({'users': [u.to_dict() for u in users]})
 
@@ -17,19 +21,26 @@ def search_categories():
     query = request.args.get('q', '')
     if not query:
         return jsonify({'categories': []})
+        
     categories = Category.query.filter(Category.name.ilike(f"%{query}%")).all()
     return jsonify({'categories': [ {"id": c.id, "name": c.name} for c in categories ]})
 
 @search_bp.route('/api/users/search-mention', methods=['GET'])
 def search_mention():
+    """ Endpoint optimisé pour l'autocomplétion des @mentions quand un utilisateur écrit un post """
     query = request.args.get('q', '')
+    
+    # On n'interroge pas la base tant que l'utilisateur n'a pas tapé au moins un caractère après le @
     if len(query) < 1:
         return jsonify([])
     
+    # Ici, pas de % au début du ilike : on veut uniquement les pseudos qui COMMENCENT par ce qui est tapé
+    # Le limit(5) évite de charger des centaines d'utilisateurs pour rien dans la petite pop-up du front
     users = User.query.filter(
         User.pseudo.ilike(f'{query}%')
     ).limit(5).all()
     
+    # On renvoie uniquement le strict nécessaire pour l'affichage de la liste des suggestions
     return jsonify([{
         'id': u.id,
         'pseudo': u.pseudo,

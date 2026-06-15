@@ -8,7 +8,7 @@ reply_likes_bp = Blueprint('reply_likes', __name__)
 
 @reply_likes_bp.route('/api/replies/<int:reply_id>/like', methods=['POST'])
 def toggle_reply_like(reply_id):
-    """Toggle like sur une réponse"""
+    """ Système de switch : on ajoute le like si absents, ou on le retire s'il existe déjà """
     try:
         data = request.get_json()
         user_id = data.get('user_id')
@@ -24,12 +24,15 @@ def toggle_reply_like(reply_id):
         if not user:
             return jsonify({'error': 'Utilisateur non trouvé'}), 404
             
+        # On vérifie si l'utilisateur a déjà mis un like sur cette réponse spécifique
         existing_like = ReplyLike.query.filter_by(user_id=user_id, replies_id=reply_id).first()
         
         if existing_like:
+            # Cas 1 : Le like existe, donc l'utilisateur reclique pour l'enlever (Unlike)
             db.session.delete(existing_like)
             db.session.commit()
             
+            # On recalcule le total après la suppression pour renvoyer le compteur à jour au front
             likes_count = ReplyLike.query.filter_by(replies_id=reply_id).count()
             
             return jsonify({
@@ -38,6 +41,7 @@ def toggle_reply_like(reply_id):
                 'likes_count': likes_count
             }), 200
         else:
+            # Cas 2 : Pas de like trouvé, on crée une nouvelle entrée en base (Like)
             new_like = ReplyLike(user_id=user_id, replies_id=reply_id)
             db.session.add(new_like)
             db.session.commit()
@@ -56,7 +60,7 @@ def toggle_reply_like(reply_id):
 
 @reply_likes_bp.route('/api/replies/<int:reply_id>/likes', methods=['GET'])
 def get_reply_likes(reply_id):
-    """Obtenir les likes d'une réponse"""
+    """ Récupère le compteur de likes et la liste des profils des utilisateurs qui ont liké """
     try:
         reply = Reply.query.get(reply_id)
         if not reply:
@@ -65,6 +69,7 @@ def get_reply_likes(reply_id):
         likes = ReplyLike.query.filter_by(replies_id=reply_id).all()
         likes_count = len(likes)
         
+        # On extrait les infos de profil minimales pour l'affichage de la pop-up des likes sur le front
         users_who_liked = []
         for like in likes:
             user = User.query.get(like.user_id)
@@ -86,11 +91,11 @@ def get_reply_likes(reply_id):
 
 @reply_likes_bp.route('/api/users/<int:user_id>/replies/<int:reply_id>/like-status', methods=['GET'])
 def check_reply_like_status(user_id, reply_id):
-    """Vérifier si un utilisateur a liké une réponse"""
+    """ Petit endpoint utilitaire pour que le front sache si le bouton doit être allumé ou éteint au chargement """
     try:
         like = ReplyLike.query.filter_by(user_id=user_id, replies_id=reply_id).first()
         return jsonify({
-            'liked': like is not None
+            'liked': like is not None  # Renvoie True si une ligne existe, sinon False
         }), 200
     except Exception as e:
         return jsonify({'error': f'Erreur serveur: {str(e)}'}), 500
