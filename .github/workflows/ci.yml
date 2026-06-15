@@ -96,6 +96,7 @@ jobs:
         python -m py_compile app.py
 
   frontend:
+    name: Frontend Build
     runs-on: ubuntu-latest
     
     env:
@@ -130,3 +131,114 @@ jobs:
       run: |
         cd Nextjs
         npm run build
+
+  docker:
+    name: Docker Build & Health Check
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+    - uses: actions/checkout@v4
+
+    # ── Création du fichier .flaskenv pour le conteneur backend ──────────
+    - name: Créer Flask/.flaskenv
+      run: |
+        cat > Flask/.flaskenv << 'EOF'
+        FLASK_APP=app.py
+        FLASK_ENV=development
+        FLASK_DEBUG=1
+        DATABASE_URL=sqlite:///test.db
+        SECRET_KEY=dummy-secret-for-ci
+        JWT_SECRET_KEY=dummy-jwt-secret-for-ci
+        CLOUDINARY_CLOUD_NAME=dummy
+        CLOUDINARY_API_KEY=dummy
+        CLOUDINARY_API_SECRET=dummy
+        MAIL_SERVER=smtp.gmail.com
+        MAIL_PORT=587
+        MAIL_USERNAME=dummy@gmail.com
+        MAIL_PASSWORD=dummy
+        MAIL_DEFAULT_SENDER=dummy@gmail.com
+        STRIPE_SECRET_KEY=sk_test_dummy
+        STRIPE_WEBHOOK_SECRET=whsec_dummy
+        FRONTEND_URL=http://localhost:3000
+        FLASK_HOST=0.0.0.0
+        FLASK_PORT=5000
+        EOF
+
+    # ── Création du fichier .env.local pour le conteneur frontend ────────
+    - name: Créer Nextjs/.env.local
+      run: |
+        cat > Nextjs/.env.local << 'EOF'
+        NEXTAUTH_URL=http://localhost:3000
+        NEXTAUTH_SECRET=dummy-secret-for-ci
+        NEXT_PUBLIC_SUPABASE_URL=https://dummy.supabase.co
+        NEXT_PUBLIC_SUPABASE_ANON_KEY=dummy-key
+        SUPABASE_SERVICE_ROLE_KEY=dummy-key
+        GOOGLE_CLIENT_ID=dummy
+        GOOGLE_CLIENT_SECRET=dummy
+        GITHUB_CLIENT_ID=dummy
+        GITHUB_CLIENT_SECRET=dummy
+        NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_dummy
+        STRIPE_SECRET_KEY=sk_test_dummy
+        NEXT_PUBLIC_FLASK_API_URL=http://localhost:5000
+        NEXT_PUBLIC_API_URL=http://localhost:5000
+        FLASK_API_URL=http://localhost:5000
+        NEXT_PUBLIC_WEBSOCKET_URL=http://localhost:5000
+        EOF
+
+    # ── Build des images Docker ───────────────────────────────────────────
+    - name: Build des images Docker
+      run: docker compose build
+
+    # ── Démarrage des conteneurs en arrière-plan ─────────────────────────
+    - name: Démarrer les conteneurs
+      run: docker compose up -d
+
+    # ── Attente que le backend soit prêt (max 60s) ───────────────────────
+    - name: Attendre que le backend soit prêt
+      run: |
+        echo "Attente du démarrage du backend..."
+        for i in $(seq 1 30); do
+          if curl -sf http://localhost:5000/api/health; then
+            echo ""
+            echo " Backend opérationnel !"
+            break
+          fi
+          echo "Tentative $i/30 – en attente..."
+          sleep 2
+        done
+
+    # ── Vérification réelle du health check ──────────────────────────────
+    - name: Vérifier /api/health
+      run: |
+        RESPONSE=$(curl -sf http://localhost:5000/api/health)
+        echo "Réponse : $RESPONSE"
+        echo $RESPONSE | grep -q '"status"' && echo " Health check OK" || (echo " Health check échoué" && exit 1)
+
+    # ── Vérification que le frontend répond ──────────────────────────────
+    - name: Vérifier le frontend (port 3000)
+      run: |
+        for i in $(seq 1 15); do
+          if curl -sf http://localhost:3000 > /dev/null; then
+            echo " Frontend opérationnel !"
+            break
+          fi
+          echo "Tentative $i/15..."
+          sleep 2
+        done
+        curl -sf http://localhost:3000 > /dev/null || (echo " Frontend inaccessible" && exit 1)
+
+    # ── Affichage des logs en cas d'échec ────────────────────────────────
+    - name: Afficher les logs en cas d'échec
+      if: failure()
+      run: |
+        echo "=== Logs Backend ==="
+        docker compose logs backend
+        echo "=== Logs Frontend ==="
+        docker compose logs frontend
+
+    # ── Arrêt propre des conteneurs ──────────────────────────────────────
+    - name: Arrêter les conteneurs
+      if: always()
+      run: docker compose down
