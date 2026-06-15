@@ -10,6 +10,7 @@ subscriptions_bp = Blueprint('subscriptions', __name__)
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
+# Mapping obligatoire entre nos clés de plans et les vrais Price ID générés sur le dashboard Stripe
 PRICE_MAP = {
     "plus": "price_1ROyhCQ4HFaTDsy2ltML3IKu",
     "premium": "price_1ROyhzQ4HFaTDsy2roH3gom5"
@@ -19,19 +20,20 @@ SUBSCRIPTION_TYPES = ['free', 'plus', 'premium']
 SUBSCRIPTION_STATUS_TYPES = ['active', 'canceled']
 
 def validate_subscription_type(subscription_type):
-    """Valide que le type d'abonnement est autorisé par l'ENUM"""
+    """ Sécurité pour vérifier que le plan demandé correspond bien aux types autorisés par notre ENUM """
     if subscription_type not in SUBSCRIPTION_TYPES:
         raise ValueError(f"Type d'abonnement invalide: {subscription_type}. Valeurs autorisées: {SUBSCRIPTION_TYPES}")
     return subscription_type
 
 def validate_subscription_status(status):
-    """Valide que le statut d'abonnement est autorisé par l'ENUM"""
+    """ Même chose pour les statuts, on bloque si Stripe renvoie un truc qui n'est pas géré """
     if status not in SUBSCRIPTION_STATUS_TYPES:
         raise ValueError(f"Statut d'abonnement invalide: {status}. Valeurs autorisées: {SUBSCRIPTION_STATUS_TYPES}")
     return status
 
 @subscriptions_bp.route('/api/create-checkout-session', methods=['POST'])
 def create_checkout_session():
+    """ Point d'entrée pour envoyer l'utilisateur sur la page de paiement sécurisée de Stripe """
     try:
         data = request.get_json()
         plan_id = data.get("planId")
@@ -50,6 +52,7 @@ def create_checkout_session():
         if not user:
             return jsonify({'error': 'Utilisateur non trouvé'}), 404
 
+        # Sécurité pour éviter les doubles abonnements payants simultanés
         existing_subscription = Subscription.query.filter_by(
             user_id=user_id,
             status='active'
@@ -58,6 +61,7 @@ def create_checkout_session():
         if existing_subscription:
             return jsonify({'error': 'Vous avez déjà un abonnement actif. Veuillez d\'abord le résilier avant de souscrire à un nouveau plan.'}), 400
 
+        # On génère la session Stripe avec les métadonnées pour savoir qui paye quoi lors du retour webhook
         session = stripe.checkout.Session.create(
             payment_method_types=["card"],
             mode="subscription",
@@ -82,10 +86,12 @@ def create_checkout_session():
 
 @subscriptions_bp.route('/api/webhook', methods=['POST'])
 def stripe_webhook():
+    """ Réception des événements asynchrones envoyés par Stripe (paiements, annulations, etc.) """
     payload = request.data
     sig_header = request.headers.get("stripe-signature")
     endpoint_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
 
+    # On valide que la requête vient bien de Stripe et que le contenu n'a pas été altéré
     try:
         event = stripe.Webhook.construct_event(
             payload, sig_header, endpoint_secret
@@ -97,6 +103,7 @@ def stripe_webhook():
         current_app.logger.error("Signature invalide du webhook Stripe")
         return "Invalid signature", 400
 
+    # Dispatch de l'événement vers la bonne fonction interne selon le type notifié par Stripe
     try:
         if event["type"] == "checkout.session.completed":
             handle_checkout_completed(event["data"]["object"])
@@ -117,7 +124,7 @@ def stripe_webhook():
         return "Error", 500
 
 def handle_checkout_completed(session):
-    """Gérer la complétion d'une session de checkout"""
+    """ Premier événement reçu juste après la saisie de carte réussie par le client """
     try:
         session_complete = stripe.checkout.Session.retrieve(session["id"])
         
@@ -145,6 +152,7 @@ def handle_checkout_completed(session):
             price_id = PRICE_MAP.get(plan_key, "unknown")
             current_app.logger.info(f"DEBUG - Price ID: {price_id}")
 
+            # Création de la ligne d'abonnement en BDD locale liée à l'historique de l'utilisateur
             new_subscription = Subscription(
                 user_id=user_id,
                 stripe_customer_id=customer_id,
@@ -158,8 +166,8 @@ def handle_checkout_completed(session):
 
             current_app.logger.info(f"DEBUG - Subscription créée avec plan='{new_subscription.plan}', status='{new_subscription.status}'")
 
+            # On met à jour directement le rôle/niveau d'accès de l'utilisateur sur sa table principale
             old_subscription = user.subscription
-            
             if plan_key in SUBSCRIPTION_TYPES:
                 user.subscription = plan_key 
                 current_app.logger.info(f"DEBUG - User.subscription changé de '{old_subscription}' à '{user.subscription}'")
@@ -167,9 +175,7 @@ def handle_checkout_completed(session):
                 raise ValueError(f"Type d'abonnement invalide pour ENUM: {plan_key}")
 
             db.session.add(new_subscription)
-            
             db.session.flush()
-            
             db.session.commit()
 
             current_app.logger.info(f"DEBUG - Transaction commitée avec succès")
@@ -195,7 +201,7 @@ def handle_checkout_completed(session):
         raise
 
 def handle_payment_succeeded(invoice):
-    """Gérer le succès d'un paiement"""
+    """ Déclenché à chaque renouvellement mensuel réussi. On s'assure que l'accès reste 'active' """
     try:
         subscription_id = invoice["subscription"]
         if subscription_id:
@@ -220,7 +226,7 @@ def handle_payment_succeeded(invoice):
         raise
 
 def handle_subscription_updated(sub):
-    """Gérer la mise à jour d'un abonnement Stripe (ex: changement de statut ou de période)"""
+    """ Reçu si l'abonnement change de statut sur Stripe (par exemple s'il passe en impayé, ou si les dates de période changent) """
     try:
         stripe_sub_id = sub.get('id')
         if not stripe_sub_id:
@@ -232,7 +238,6 @@ def handle_subscription_updated(sub):
             current_app.logger.info(f"Subscription {stripe_sub_id} non trouvée en base")
             return
 
-        # Mettre à jour le status et les dates si présentes
         status = sub.get('status')
         current_period_start = sub.get('current_period_start')
         current_period_end = sub.get('current_period_end')
@@ -244,17 +249,15 @@ def handle_subscription_updated(sub):
             except ValueError:
                 current_app.logger.warning(f"Statut inconnu reçu: {status}")
 
-        # Stripe fournit des timestamps en secondes parfois
+        # Conversion des timestamps UNIX envoyés par Stripe en objets datetime Python
         try:
             if current_period_start:
                 subscription_db.current_period_start = datetime.utcfromtimestamp(int(current_period_start))
             if current_period_end:
                 subscription_db.current_period_end = datetime.utcfromtimestamp(int(current_period_end))
         except Exception:
-            # si ce sont des ISO strings, on ignore l'exception
             pass
 
-        # Mettre à jour l'utilisateur local si le plan est stocké
         user = User.query.get(subscription_db.user_id)
         if user and subscription_db.plan:
             try:
@@ -271,9 +274,8 @@ def handle_subscription_updated(sub):
         current_app.logger.error(f"Erreur handle_subscription_updated: {e}")
         raise
 
-
 def handle_subscription_deleted(sub):
-    """Gérer la suppression d'un abonnement Stripe (marquer canceled locally)"""
+    """ Événement critique reçu quand l'abonnement expire définitivement ou est coupé côté Stripe. On repasse le user en gratuit """
     try:
         stripe_sub_id = sub.get('id')
         if not stripe_sub_id:
@@ -304,7 +306,7 @@ def handle_subscription_deleted(sub):
 
 @subscriptions_bp.route('/api/user/<int:user_id>/subscription', methods=['GET'])
 def get_user_subscription(user_id):
-    """Récupérer l'abonnement actuel d'un utilisateur"""
+    """ Endpoint pour permettre au front d'afficher l'état de l'abonnement sur l'interface profil / paramètres """
     try:
         user = User.query.get(user_id)
         if not user:
@@ -326,7 +328,7 @@ def get_user_subscription(user_id):
 
 @subscriptions_bp.route('/api/user/<int:user_id>/cancel-subscription', methods=['POST'])
 def cancel_subscription(user_id):
-    """Annuler l'abonnement d'un utilisateur immédiatement"""
+    """ Permet à un utilisateur de couper son abonnement lui-même depuis son espace client (effet immédiat ici) """
     try:
         subscription = Subscription.query.filter_by(
             user_id=user_id,
@@ -338,6 +340,7 @@ def cancel_subscription(user_id):
 
         current_app.logger.info(f"DEBUG - Annulation de l'abonnement {subscription.stripe_subscription_id} pour l'utilisateur {user_id}")
 
+        # Demande d'arrêt envoyée directement à l'API Stripe
         try:
             canceled_subscription = stripe.Subscription.cancel(subscription.stripe_subscription_id)
             current_app.logger.info(f"DEBUG - Abonnement Stripe annulé: {canceled_subscription.status}")
@@ -349,6 +352,7 @@ def cancel_subscription(user_id):
         subscription.status = 'canceled'
         subscription.current_period_end = current_time
         
+        # On le rétrograde immédiatement en 'free' côté BDD locale
         user = User.query.get(user_id)
         if user:
             old_subscription = user.subscription

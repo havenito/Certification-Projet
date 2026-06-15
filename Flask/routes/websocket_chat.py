@@ -7,31 +7,32 @@ from models.chat import Chat
 import json
 from datetime import datetime, timezone, timedelta
 
-# Initialiser SocketIO globalement
+# Instance globale pour gérer les WebSockets dans toute l'app
 socketio = SocketIO()
 
-# Stockage des utilisateurs connectés
+# Le dico pour garder sous le coude la correspondance entre l'ID de l'user et son SID (sa session socket active)
 connected_users = {}
 
 def init_socketio(app):
-    """Initialiser SocketIO avec l'application Flask"""
+    """ Config de base au démarrage de Flask (CORS, logs, etc.) """
     frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
     
     socketio.init_app(app, 
-                     cors_allowed_origins=[frontend_url, "http://127.0.0.1:3000", "http://localhost:8080", "null"],
-                     logger=True, 
-                     engineio_logger=True)
+                      cors_allowed_origins=[frontend_url, "http://127.0.0.1:3000", "http://localhost:8080", "null"],
+                      logger=True, 
+                      engineio_logger=True)
     return socketio
 
 @socketio.on('connect')
 def handle_connect():
+    # Un client vient de se connecter, on loggue sa session unique (sid)
     print(f'Client connecté: {request.sid}')
     emit('status', {'message': 'Connecté au serveur WebSocket'})
 
 @socketio.on('disconnect')
 def handle_disconnect():
     print(f'Client déconnecté: {request.sid}')
-    # Supprimer l'utilisateur de la liste des connectés
+    # Nettoyage obligatoire : si le mec part, on vire son SID de notre dictionnaire global
     for user_id, sid in list(connected_users.items()):
         if sid == request.sid:
             del connected_users[user_id]
@@ -39,7 +40,7 @@ def handle_disconnect():
 
 @socketio.on('join_user')
 def handle_join_user(data):
-    """L'utilisateur rejoint sa room personnelle"""
+    """ On met l'utilisateur dans son propre canal privé (utile pour ses notifications) """
     user_id = data.get('user_id')
     if user_id:
         connected_users[user_id] = request.sid
@@ -49,7 +50,7 @@ def handle_join_user(data):
 
 @socketio.on('join_conversation')
 def handle_join_conversation(data):
-    """L'utilisateur rejoint une conversation spécifique"""
+    """ Quand l'utilisateur ouvre une fenêtre de tchat """
     conversation_id = data.get('conversation_id')
     user_id = data.get('user_id')
     
@@ -60,7 +61,7 @@ def handle_join_conversation(data):
 
 @socketio.on('leave_conversation')
 def handle_leave_conversation(data):
-    """L'utilisateur quitte une conversation"""
+    """ Quand l'utilisateur quitte une conversation """
     conversation_id = data.get('conversation_id')
     user_id = data.get('user_id')
     
@@ -71,19 +72,20 @@ def handle_leave_conversation(data):
 
 @socketio.on('send_message')
 def handle_send_message(data):
-    """Envoi d'un message via WebSocket"""
+    """ Le gros morceau : réception, sauvegarde et renvoi d'un message en temps réel """
     try:
-        print(f"\n🚀 === SENDING MESSAGE VIA WEBSOCKET ===")
-        print(f"📨 Received data: {data}")
+        print(f"\n=== SENDING MESSAGE VIA WEBSOCKET ===")
+        print(f"Received data: {data}")
         
         sender_id = data.get('sender_id')
         recipient_id = data.get('recipient_id')
         content = data.get('content')
         conversation_id = data.get('conversation_id')
-        temp_id = data.get('tempId')
+        temp_id = data.get('tempId') # ID temporaire généré par le front (pour l'affichage en attente de validation)
 
+        # Sécurité de base : si on n'a pas ça, on peut rien faire
         if not all([sender_id, recipient_id, content]):
-            print("❌ Missing required data")
+            print("Missing required data")
             emit('error', {'message': 'Données manquantes'})
             return
 
@@ -91,11 +93,11 @@ def handle_send_message(data):
         recipient = User.query.get(recipient_id)
         
         if not sender or not recipient:
-            print("❌ User not found")
+            print("User not found")
             emit('error', {'message': 'Utilisateur non trouvé'})
             return
 
-        # Générer l'ID de conversation
+        # Si pas de conversation_id valide (ou reçu en string), on en génère un unique basé sur les IDs des 2 users
         if not conversation_id or isinstance(conversation_id, str):
             sorted_ids = sorted([sender_id, recipient_id])
             conversation_id = int(f"{sorted_ids[0]}{sorted_ids[1]:03d}")
@@ -106,9 +108,9 @@ def handle_send_message(data):
             sorted_ids = sorted([sender_id, recipient_id])
             conversation_id = int(f"{sorted_ids[0]}{sorted_ids[1]:03d}")
 
-        print(f"💡 Final conversation_id: {conversation_id}")
+        print(f"Final conversation_id: {conversation_id}")
 
-        # VÉRIFICATION ANTI-DOUBLON : Regarder s'il n'y a pas déjà un message identique récent
+        # Sécurité anti-double clic / spam : on regarde si le même message a été envoyé il y a moins de 5 secondes
         recent_threshold = datetime.now(timezone.utc) - timedelta(seconds=5)
         existing_message = Chat.query.filter(
             Chat.conversation_id == conversation_id,
@@ -118,9 +120,9 @@ def handle_send_message(data):
         ).first()
         
         if existing_message:
-            print(f"⚠️ Duplicate message detected, returning existing message: {existing_message.id}")
+            # Si c'est un doublon, on stoppe tout, on ne crée rien en BDD, mais on renvoie quand même le premier message au front
+            print(f"Duplicate message detected, returning existing message: {existing_message.id}")
             
-            # Retourner le message existant au lieu d'en créer un nouveau
             message_data = {
                 'id': existing_message.id,
                 'conversation_id': conversation_id,
@@ -135,7 +137,7 @@ def handle_send_message(data):
                 }
             }
             
-            # Confirmer l'envoi à l'expéditeur avec le message existant
+            # On confirme au front que c'est ok pour rassurer l'interface de l'expéditeur
             emit('message_sent', {
                 'success': True,
                 'message_id': existing_message.id,
@@ -144,9 +146,9 @@ def handle_send_message(data):
                 'tempId': temp_id,
                 'message_data': message_data
             })
-            
             return
 
+        # Si tout est bon et pas de doublon, création classique dans la base de données
         new_chat = Chat(
             conversation_id=conversation_id,
             sender_id=sender_id,
@@ -157,10 +159,11 @@ def handle_send_message(data):
         new_chat.send_at = datetime.now(timezone.utc)
         
         db.session.add(new_chat)
-        db.session.commit()
+        db.session.commit() # On valide en BDD
         
-        print(f"💾 NEW message saved to DB with ID: {new_chat.id}")
+        print(f"NEW message saved to DB with ID: {new_chat.id}")
 
+        # Formatage propre de l'objet pour l'envoyer proprement en JSON aux clients
         message_data = {
             'id': new_chat.id,
             'conversation_id': conversation_id,
@@ -175,12 +178,12 @@ def handle_send_message(data):
             }
         }
 
-        # Envoyer le message aux participants de la conversation
+        # 1. On arrose la room de la conversation pour que l'autre personne reçoive le message en direct (sans l'envoyer à soi-même)
         room_name = f"conv_{conversation_id}"
-        print(f"📡 Broadcasting to room: {room_name}")
+        print(f"Broadcasting to room: {room_name}")
         socketio.emit('new_message', message_data, room=room_name, include_self=False)
         
-        # Envoyer notification au destinataire
+        # 2. On envoie une notification globale à l'autre utilisateur s'il est connecté mais sur une autre page du site
         user_room = f"user_{recipient_id}"
         socketio.emit('message_notification', {
             'conversation_id': conversation_id,
@@ -189,7 +192,7 @@ def handle_send_message(data):
             'timestamp': new_chat.send_at.isoformat().replace('+00:00', 'Z')
         }, room=user_room)
 
-        # Confirmer l'envoi à l'expéditeur
+        # 3. Enfin, on confirme à l'envoyeur que sa BDD a bien enregistré le message pour remplacer son statut "en attente" par le vrai ID
         emit('message_sent', {
             'success': True,
             'message_id': new_chat.id,
@@ -199,24 +202,26 @@ def handle_send_message(data):
             'message_data': message_data
         })
 
-        print(f"✅ Message successfully sent from {sender_id} to {recipient_id}")
+        print(f"Message successfully sent from {sender_id} to {recipient_id}")
         print(f"=== END SENDING MESSAGE ===\n")
 
     except Exception as e:
+        # Rollback d'urgence pour ne pas bloquer ou corrompre SQL Alchemy si le commit foire
         db.session.rollback()
-        print(f"💥 CRITICAL ERROR in send_message: {str(e)}")
+        print(f"CRITICAL ERROR in send_message: {str(e)}")
         import traceback
         traceback.print_exc()
         emit('error', {'message': f'Erreur lors de l\'envoi: {str(e)}'})
 
 @socketio.on('typing')
 def handle_typing(data):
-    """Gestion du statut "en train d'écrire" """
+    """ Envoi des events de type "Enzo est en train d'écrire..." """
     conversation_id = data.get('conversation_id')
     user_id = data.get('user_id')
     is_typing = data.get('is_typing', False)
     
     if conversation_id and user_id:
+        # On bombarde l'info à tout le monde dans le tchat (sauf à celui qui tape, logique)
         emit('user_typing', {
             'user_id': user_id,
             'is_typing': is_typing,
