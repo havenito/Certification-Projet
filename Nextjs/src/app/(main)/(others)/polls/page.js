@@ -22,9 +22,8 @@ export default function PollsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [hasNext, setHasNext] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [selectedPoll, setSelectedPoll] = useState(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
 
+  // Récupération de la liste des catégories (une seule fois au montage du composant)
   useEffect(() => {
     const fetchCategories = async () => {
       try {
@@ -41,6 +40,8 @@ export default function PollsPage() {
     fetchCategories();
   }, []);
 
+  // Récupère une page de sondages, soit en remplaçant la liste actuelle (append=false),
+  // soit en l'ajoutant à la suite (append=true, utilisé pour le scroll infini)
   const fetchPolls = useCallback(async (pageNum = 1, categoryId = '', append = false) => {
     try {
       if (!append) {
@@ -51,25 +52,26 @@ export default function PollsPage() {
       }
       setError(null);
 
+      // Endpoint différent selon qu'un filtre de catégorie est actif ou non
       let url = `${process.env.NEXT_PUBLIC_FLASK_API_URL}/api/polls?page=${pageNum}&limit=${PAGE_SIZE}`;
       if (categoryId) {
         url = `${process.env.NEXT_PUBLIC_FLASK_API_URL}/api/polls/category/${categoryId}?page=${pageNum}&limit=${PAGE_SIZE}`;
       }
 
       const response = await fetch(url);
-      
+
       if (!response.ok) {
         throw new Error('Erreur lors du chargement des sondages');
       }
-      
+
       const data = await response.json();
-      
+
       if (append) {
         setPolls(prev => [...prev, ...(data.polls || [])]);
       } else {
         setPolls(data.polls || []);
       }
-      
+
       setHasNext(data.has_next || false);
       setCurrentPage(pageNum);
     } catch (err) {
@@ -80,6 +82,7 @@ export default function PollsPage() {
     }
   }, []);
 
+  // Déclenché par le hook de scroll infini : charge la page suivante si disponible
   const fetchMore = useCallback(async () => {
     if (hasNext && !loadingMore) {
       await fetchPolls(currentPage + 1, selectedCategory, true);
@@ -88,6 +91,7 @@ export default function PollsPage() {
 
   const [isFetching] = useInfiniteScroll(fetchMore);
 
+  // Recharge depuis la première page chaque fois que le filtre de catégorie change
   useEffect(() => {
     fetchPolls(1, selectedCategory, false);
   }, [selectedCategory, fetchPolls]);
@@ -99,23 +103,13 @@ export default function PollsPage() {
     setHasNext(true);
   };
 
+  // Ajoute le nouveau sondage créé en tête de liste, sans recharger toute la liste
   const handlePollCreated = (newPoll) => {
     setPolls(prev => [newPoll, ...prev]);
     setShowCreateModal(false);
   };
 
-  const handlePollClick = (poll) => {
-    setSelectedPoll(poll);
-    setShowDetailModal(true);
-  };
-
-  const handleVoteSuccess = (updatedPoll) => {
-    setPolls(prev => prev.map(poll => 
-      poll.id === updatedPoll.id ? updatedPoll : poll
-    ));
-    setSelectedPoll(updatedPoll);
-  };
-
+  // --- État de chargement initial ---
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#111] text-white p-4">
@@ -131,6 +125,7 @@ export default function PollsPage() {
     );
   }
 
+  // --- État d'erreur (avec bouton de réessai) ---
   if (error) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#111] text-white p-4">
@@ -138,7 +133,7 @@ export default function PollsPage() {
           <FontAwesomeIcon icon={faExclamationTriangle} size="3x" className="text-red-400 mb-4" />
           <h1 className="text-2xl font-bold mb-2">Erreur de chargement</h1>
           <p className="text-gray-400 mb-6">{error}</p>
-          <button 
+          <button
             onClick={() => fetchPolls(1, selectedCategory, false)}
             className="bg-[#90EE90] text-black px-6 py-3 rounded-full hover:bg-[#7CD37C] transition-colors font-semibold"
           >
@@ -165,7 +160,8 @@ export default function PollsPage() {
               </h1>
               <p className="text-gray-400">Participez aux sondages de la communauté</p>
             </div>
-            
+
+            {/* Le bouton de création n'est visible que pour les utilisateurs connectés */}
             {session?.user && (
               <motion.button
                 whileHover={{ scale: 1.05 }}
@@ -179,6 +175,7 @@ export default function PollsPage() {
             )}
           </div>
 
+          {/* Filtre par catégorie */}
           <div className="flex items-center space-x-4 mb-4">
             <FontAwesomeIcon icon={faFilter} className="text-gray-400" />
             <select
@@ -196,6 +193,7 @@ export default function PollsPage() {
           </div>
         </motion.div>
 
+        {/* Liste des sondages, ou message si aucun sondage disponible */}
         {polls.length === 0 ? (
           <motion.div
             initial={{ opacity: 0 }}
@@ -205,8 +203,8 @@ export default function PollsPage() {
             <FontAwesomeIcon icon={faChartBar} size="3x" className="text-gray-500 mb-4" />
             <h2 className="text-xl font-semibold mb-2">Aucun sondage disponible</h2>
             <p className="text-gray-400">
-              {session?.user 
-                ? "Soyez le premier à créer un sondage !" 
+              {session?.user
+                ? "Soyez le premier à créer un sondage !"
                 : "Connectez-vous pour participer aux sondages."}
             </p>
           </motion.div>
@@ -220,6 +218,8 @@ export default function PollsPage() {
             }}
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
           >
+            {/* PollCard contient son propre lien vers /polls/[id] : pas besoin de gérer
+                un onClick ou un modal de détail ici, contrairement à la version précédente */}
             {polls.map((poll) => (
               <motion.div
                 key={poll.id}
@@ -228,9 +228,8 @@ export default function PollsPage() {
                   visible: { opacity: 1, y: 0 }
                 }}
               >
-                <PollCard 
-                  poll={poll} 
-                  onClick={() => handlePollClick(poll)}
+                <PollCard
+                  poll={poll}
                   isAuthenticated={!!session?.user}
                 />
               </motion.div>
@@ -238,12 +237,14 @@ export default function PollsPage() {
           </motion.div>
         )}
 
+        {/* Indicateur de chargement pendant le scroll infini */}
         {loadingMore && (
           <div className="flex justify-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#90EE90]"></div>
           </div>
         )}
 
+        {/* Message affiché quand toutes les pages ont été chargées */}
         {!hasNext && polls.length > 0 && (
           <div className="text-center py-8">
             <p className="text-gray-400">Vous avez vu tous les sondages disponibles !</p>
@@ -251,6 +252,7 @@ export default function PollsPage() {
         )}
       </div>
 
+      {/* Modal de création de sondage */}
       <CreatePollModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}

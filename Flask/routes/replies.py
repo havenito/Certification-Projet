@@ -16,10 +16,18 @@ from services.file_upload import upload_file, determine_media_type
 
 replies_api = Blueprint('replies_api', __name__)
 
+
+# ============================================================
+# Route : création d'une réponse
+# Une réponse répond SOIT à un commentaire (comment_id), SOIT à une autre
+# réponse (replies_id) — jamais les deux à la fois. Accepte JSON ou
+# multipart/form-data (avec upload de médias dans ce dernier cas).
+# ============================================================
 @replies_api.route('/api/replies', methods=['POST'])
 def create_replie():
     try:
         if request.is_json:
+            # Cas JSON : pas de médias possibles
             data = request.get_json()
             content = data.get('content')
             comment_id = data.get('comment_id')
@@ -27,49 +35,54 @@ def create_replie():
             user_id = data.get('user_id')
             media_files = []
         else:
+            # Cas multipart : récupération des champs texte + fichiers
             content = request.form.get('content')
             comment_id = request.form.get('comment_id')
             replies_id = request.form.get('replies_id')
             user_id = request.form.get('user_id')
-            
+
             media_files = []
+            # Support d'un fichier unique envoyé sous la clé 'file'
             if 'file' in request.files:
                 file = request.files['file']
                 if file.filename:
                     media_files.append(file)
-                    
+
+            # Support de plusieurs fichiers envoyés sous la clé 'files[]'
             if 'files[]' in request.files:
                 files = request.files.getlist('files[]')
                 media_files.extend(files)
 
         if not content:
             return jsonify({'error': 'Content is required'}), 400
-        
+
+        # Une réponse doit avoir EXACTEMENT une cible : un commentaire OU une autre réponse
         if not comment_id and not replies_id:
             return jsonify({'error': 'Either comment_id or replies_id is required'}), 400
-        
+
         if comment_id and replies_id:
             return jsonify({'error': 'Cannot have both comment_id and replies_id'}), 400
-        
+
         new_replie = Reply(
-            content=content, 
+            content=content,
             comment_id=comment_id,
-            replies_id=replies_id, 
+            replies_id=replies_id,
             user_id=user_id
         )
         db.session.add(new_replie)
         db.session.commit()
 
+        # Upload de chaque fichier média et création de l'enregistrement ReplyMedia associé
         for file in media_files:
             url, file_type = upload_file(file)
-            
+
             if not url:
-                continue
-                
+                continue  # Upload échoué -> on ignore ce fichier
+
             media_type = determine_media_type(file_type)
             if not media_type:
-                continue
-                
+                continue  # Type de média non reconnu -> on ignore aussi
+
             reply_media = ReplyMedia(
                 replies_id=new_replie.id,
                 media_url=url,
@@ -78,15 +91,17 @@ def create_replie():
             db.session.add(reply_media)
 
         db.session.commit()
-        
+
         # Notification adaptée selon le type de réponse
+        # (l'auteur du commentaire si on répond à un commentaire,
+        # l'auteur de la réponse parente si on répond à une réponse)
         if comment_id:
             notify_user_on_new_replie(new_replie)
         else:
             notify_user_on_reply_to_reply(new_replie)
-        
+
         user = User.query.get(user_id)
-        
+
         reply_media_list = ReplyMedia.query.filter_by(replies_id=new_replie.id).all()
         media = [{
             'id': m.id,
@@ -96,7 +111,7 @@ def create_replie():
         } for m in reply_media_list]
 
         likes_count = ReplyLike.query.filter_by(replies_id=new_replie.id).count()
-        
+
         return jsonify({
             'message': 'Reply created successfully',
             'reply': {
@@ -117,19 +132,21 @@ def create_replie():
                 }
             }
         }), 201
-        
+
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Failed to create reply: {str(e)}'}), 500
 
+
 def notify_user_on_new_replie(reply):
+    """Notifie l'auteur du commentaire qu'une réponse a été postée sous son commentaire."""
     try:
         comment = Comment.query.get(reply.comment_id)
         if comment:
             notification = Notification(
-                post_id=comment.post_id,  
+                post_id=comment.post_id,
                 comments_id=comment.id,
-                user_id=comment.user_id,
+                user_id=comment.user_id,  # Destinataire = auteur du commentaire
                 replie_id=reply.id,
                 follow_id=None,
                 type="reply"
@@ -143,6 +160,7 @@ def notify_user_on_new_replie(reply):
     except Exception as e:
         print(f"Erreur lors de la notification: {e}")
 
+
 def notify_user_on_reply_to_reply(reply):
     """Notification pour les réponses aux réponses"""
     try:
@@ -150,7 +168,7 @@ def notify_user_on_reply_to_reply(reply):
         if parent_reply:
             notification = Notification(
                 replie_id=reply.id,
-                user_id=parent_reply.user_id,
+                user_id=parent_reply.user_id,  # Destinataire = auteur de la réponse parente
                 type="reply_to_reply"
             )
             db.session.add(notification)
@@ -162,13 +180,22 @@ def notify_user_on_reply_to_reply(reply):
     except Exception as e:
         print(f"Erreur lors de la notification: {e}")
 
+
+# ============================================================
+# Route : liste brute de TOUTES les réponses (toutes données confondues)
+# Version minimale, sans médias/likes/sous-réponses ni infos utilisateur
+# ============================================================
 @replies_api.route('/api/replies', methods=['GET'])
 def get_replies():
     replies = Reply.query.all()
     replies_list = [{'id': reply.id, 'content': reply.content, 'comment_id': reply.comment_id, 'user_id': reply.user_id} for reply in replies]
-    
+
     return jsonify({'replies': replies_list}), 200
 
+
+# ============================================================
+# Route : mise à jour du contenu d'une réponse
+# ============================================================
 @replies_api.route('/api/replies/<int:replie_id>', methods=['PUT'])
 def update_replie(replie_id):
     data = request.get_json()
@@ -178,6 +205,7 @@ def update_replie(replie_id):
     if not reply:
         return jsonify({'error': 'Reply not found'}), 404
 
+    # Note : si content est une chaîne vide (""), elle est falsy donc ignorée
     if content:
         reply.content = content
 
@@ -185,6 +213,10 @@ def update_replie(replie_id):
 
     return jsonify({'message': 'Reply updated successfully'}), 200
 
+
+# ============================================================
+# Route : suppression d'une réponse
+# ============================================================
 @replies_api.route('/api/replies/<int:replie_id>', methods=['DELETE'])
 def delete_replie(replie_id):
     reply = Reply.query.get(replie_id)
@@ -196,6 +228,10 @@ def delete_replie(replie_id):
 
     return jsonify({'message': 'Reply deleted successfully'}), 200
 
+
+# ============================================================
+# Route : détail complet d'une réponse, avec son arborescence de sous-réponses
+# ============================================================
 @replies_api.route('/api/replies/<int:replie_id>', methods=['GET'])
 def get_replie(replie_id):
     try:
@@ -204,7 +240,7 @@ def get_replie(replie_id):
             return jsonify({'error': 'Reply not found'}), 404
 
         user = User.query.get(reply.user_id)
-        
+
         reply_media_list = ReplyMedia.query.filter_by(replies_id=reply.id).all()
         media = [{
             'id': m.id,
@@ -215,22 +251,24 @@ def get_replie(replie_id):
 
         likes_count = ReplyLike.query.filter_by(replies_id=reply.id).count()
 
+        # Niveau 1 : réponses directes à cette réponse
         sub_replies = Reply.query.filter_by(replies_id=reply.id).order_by(Reply.created_at.asc()).all()
         sub_replies_data = []
-        
+
         for sub_reply in sub_replies:
             sub_reply_user = User.query.get(sub_reply.user_id)
             sub_reply_media = ReplyMedia.query.filter_by(replies_id=sub_reply.id).all()
             sub_reply_likes = ReplyLike.query.filter_by(replies_id=sub_reply.id).count()
-            
+
+            # Niveau 2 : réponses aux réponses du niveau 1 (= dernier niveau géré ici)
             sub_sub_replies = Reply.query.filter_by(replies_id=sub_reply.id).order_by(Reply.created_at.asc()).all()
             sub_sub_replies_data = []
-            
+
             for sub_sub_reply in sub_sub_replies:
                 sub_sub_reply_user = User.query.get(sub_sub_reply.user_id)
                 sub_sub_reply_media = ReplyMedia.query.filter_by(replies_id=sub_sub_reply.id).all()
                 sub_sub_reply_likes = ReplyLike.query.filter_by(replies_id=sub_sub_reply.id).count()
-                
+
                 sub_sub_replies_data.append({
                     'id': sub_sub_reply.id,
                     'content': sub_sub_reply.content,
@@ -249,7 +287,7 @@ def get_replie(replie_id):
                         'profile_picture': sub_sub_reply_user.profile_picture if sub_sub_reply_user else None
                     }
                 })
-            
+
             sub_replies_data.append({
                 'id': sub_reply.id,
                 'content': sub_reply.content,
@@ -293,6 +331,10 @@ def get_replie(replie_id):
     except Exception as e:
         return jsonify({'error': f'Failed to get reply: {str(e)}'}), 500
 
+
+# ============================================================
+# Route : commentaires liés à une réponse (via la relation ORM reply.comments)
+# ============================================================
 @replies_api.route('/api/replies/<int:replie_id>/comments', methods=['GET'])
 def get_replie_comments(replie_id):
     reply = Reply.query.get(replie_id)
@@ -301,9 +343,21 @@ def get_replie_comments(replie_id):
 
     comments = reply.comments
     comments_list = [{'id': comment.id, 'content': comment.content, 'created_at': comment.created_at} for comment in comments]
-    
+
     return jsonify({'comments': comments_list}), 200
 
+
+# ============================================================
+# Route : récupère le "fil" complet autour d'une réponse, c'est-à-dire :
+# - la réponse elle-même (avec ses sous-réponses, jusqu'à 3 niveaux comme dans get_replie)
+# - toutes ses réponses parentes, en remontant jusqu'à la racine (via une boucle `while`,
+#   donc SANS limite de profondeur contrairement à la descente vers les enfants)
+# - le commentaire racine du fil
+# - le post d'origine
+#
+# Utile par exemple pour afficher le contexte complet quand on arrive directement
+# sur une réponse profondément imbriquée (lien direct, notification, etc.)
+# ============================================================
 @replies_api.route('/api/replies/<int:reply_id>/thread', methods=['GET'])
 def get_reply_thread(reply_id):
     """Récupère le fil complet d'une réponse jusqu'au post d'origine"""
@@ -323,21 +377,22 @@ def get_reply_thread(reply_id):
         main_reply_media = ReplyMedia.query.filter_by(replies_id=main_reply.id).all()
         main_reply_likes = ReplyLike.query.filter_by(replies_id=main_reply.id).count()
         sub_replies = Reply.query.filter_by(replies_id=main_reply.id).order_by(Reply.created_at.asc()).all()
-        
+
+        # Même logique de descente à 2 niveaux que dans get_replie (voir avertissement plus haut)
         sub_replies_data = []
         for sub_reply in sub_replies:
             sub_reply_user = User.query.get(sub_reply.user_id)
             sub_reply_media = ReplyMedia.query.filter_by(replies_id=sub_reply.id).all()
             sub_reply_likes = ReplyLike.query.filter_by(replies_id=sub_reply.id).count()
-            
+
             sub_sub_replies = Reply.query.filter_by(replies_id=sub_reply.id).order_by(Reply.created_at.asc()).all()
             sub_sub_replies_data = []
-            
+
             for sub_sub_reply in sub_sub_replies:
                 sub_sub_reply_user = User.query.get(sub_sub_reply.user_id)
                 sub_sub_reply_media = ReplyMedia.query.filter_by(replies_id=sub_sub_reply.id).all()
                 sub_sub_reply_likes = ReplyLike.query.filter_by(replies_id=sub_sub_reply.id).count()
-                
+
                 sub_sub_replies_data.append({
                     'id': sub_sub_reply.id,
                     'content': sub_sub_reply.content,
@@ -356,7 +411,7 @@ def get_reply_thread(reply_id):
                         'profile_picture': sub_sub_reply_user.profile_picture if sub_sub_reply_user else None
                     }
                 })
-            
+
             sub_replies_data.append({
                 'id': sub_reply.id,
                 'content': sub_reply.content,
@@ -399,18 +454,21 @@ def get_reply_thread(reply_id):
             }
         }
 
+        # Remontée vers la racine : tant que la réponse courante a une réponse parente
+        # (replies_id renseigné), on continue de remonter. Pas de limite de profondeur ici,
+        # contrairement à la descente vers les enfants qui est plafonnée à 2 niveaux.
         current_reply = main_reply
         parent_replies = []
-        
+
         while current_reply.replies_id:
             parent_reply = Reply.query.get(current_reply.replies_id)
             if not parent_reply:
-                break
-                
+                break  # Sécurité si la réponse parente référencée n'existe plus
+
             parent_reply_user = User.query.get(parent_reply.user_id)
             parent_reply_media = ReplyMedia.query.filter_by(replies_id=parent_reply.id).all()
             parent_reply_likes = ReplyLike.query.filter_by(replies_id=parent_reply.id).count()
-            
+
             parent_replies.append({
                 'id': parent_reply.id,
                 'content': parent_reply.content,
@@ -431,19 +489,27 @@ def get_reply_thread(reply_id):
                     'profile_picture': parent_reply_user.profile_picture if parent_reply_user else None
                 }
             })
-            
+
             current_reply = parent_reply
 
+        # On avait accumulé les réponses parentes en remontant (du plus proche au plus
+        # éloigné de main_reply) ; on inverse pour avoir l'ordre chronologique naturel
+        # (racine en premier, jusqu'à la réponse juste avant main_reply)
         thread['parent_replies'] = list(reversed(parent_replies))
 
+        # Une fois remonté au sommet de la chaîne de réponses, current_reply est soit
+        # la réponse racine (rattachée directement à un commentaire), soit main_reply
+        # elle-même si elle n'avait pas de parent
         if current_reply.comment_id:
             comment = Comment.query.get(current_reply.comment_id)
             if comment:
                 comment_user = User.query.get(comment.user_id)
                 comment_media = CommentMedia.query.filter_by(comment_id=comment.id).all()
                 comment_likes = CommentLike.query.filter_by(comment_id=comment.id).count()
+                # Liste de TOUTES les réponses directes à ce commentaire (pas uniquement
+                # celles liées à main_reply), pour donner le contexte complet du commentaire
                 comment_replies = Reply.query.filter_by(comment_id=comment.id).order_by(Reply.created_at.asc()).all()
-                
+
                 thread['comment'] = {
                     'id': comment.id,
                     'content': comment.content,
@@ -455,6 +521,8 @@ def get_reply_thread(reply_id):
                         'url': m.media_url,
                         'type': m.media_type
                     } for m in comment_media],
+                    # Version résumée de chaque réponse du commentaire (sans média/user complet,
+                    # juste un aperçu léger, contrairement aux objets détaillés utilisés ailleurs)
                     'replies': [{
                         'id': r.id,
                         'content': r.content,
@@ -470,6 +538,7 @@ def get_reply_thread(reply_id):
                     }
                 }
 
+                # Récupère enfin le post d'origine, racine ultime du fil de discussion
                 post = Post.query.get(comment.post_id)
                 if post:
                     post_user = User.query.get(post.user_id)
@@ -477,7 +546,7 @@ def get_reply_thread(reply_id):
                     post_likes = Like.query.filter_by(post_id=post.id).count()
                     post_comments = Comment.query.filter_by(post_id=post.id).count()
                     category = Category.query.get(post.category_id) if post.category_id else None
-                    
+
                     thread['post'] = {
                         'id': post.id,
                         'title': post.title,
