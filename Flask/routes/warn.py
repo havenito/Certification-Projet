@@ -10,12 +10,6 @@ warn_bp = Blueprint('warn_bp', __name__)
 # ============================================================
 # Route : ajoute un avertissement à un utilisateur, avec bannissement
 # automatique au 3e avertissement
-#
-# Aucune vérification d'autorisation ici (pas de contrôle que l'appelant
-# est bien un modérateur/admin) : n'importe qui connaissant l'URL et l'ID
-# d'un utilisateur pourrait lui ajouter un avertissement, voire le faire
-# bannir automatiquement en appelant cette route 3 fois. À sécuriser via
-# une vérification de rôle (ex: décorateur @admin_required).
 # ============================================================
 @warn_bp.route('/api/warn/<int:user_id>', methods=['POST'])
 def warn_user(user_id):
@@ -26,7 +20,7 @@ def warn_user(user_id):
     # On incrémente le compteur de avertissements (sécurité si le champ est None de base)
     user.warn_count = (user.warn_count or 0) + 1
 
-    # Seuil critique : si le mec atteint 3 avertissements, le système le bascule en banni direct
+    # Seuil critique : si la personne atteint 3 avertissements, le système le bascule en banni direct
     # Note : ce bannissement automatique est permanent (is_banned=True, ban_until non défini
     # donc reste à sa valeur précédente — généralement None = ban à vie), contrairement à
     # ban_user qui permet de choisir une durée
@@ -43,9 +37,6 @@ def warn_user(user_id):
 
 # ============================================================
 # Route : bannir un utilisateur, temporairement ou définitivement
-#
-# Même remarque que warn_user : aucune vérification d'autorisation,
-# n'importe qui peut bannir n'importe quel utilisateur via cette route.
 # ============================================================
 @warn_bp.route('/api/ban/<int:user_id>', methods=['POST'])
 def ban_user(user_id):
@@ -74,8 +65,6 @@ def ban_user(user_id):
 # 3 avertissements gardera ces 3 avertissements en mémoire. S'il en reçoit un seul
 # de plus après son retour, il repassera automatiquement banni (via warn_user,
 # puisque warn_count sera déjà à 3 et l'incrémentation le passera à 4, donc >= 3).
-# À vérifier si c'est le comportement voulu, ou si un débannissement devrait aussi
-# remettre warn_count à 0 pour donner un vrai nouveau départ.
 # ============================================================
 @warn_bp.route('/api/unban/<int:user_id>', methods=['POST'])
 def unban_user(user_id):

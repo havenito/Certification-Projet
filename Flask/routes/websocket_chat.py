@@ -124,11 +124,6 @@ def handle_leave_conversation(data):
 # principale est que ce flux notifie immédiatement les autres clients connectés
 # via les rooms Socket.IO, sans que le destinataire ait besoin de faire un polling
 # HTTP pour voir le nouveau message.
-#
-# ⚠️ Aucune vérification que sender_id correspond bien au client qui envoie
-# l'événement (pas d'authentification du socket) : un client malveillant pourrait
-# théoriquement envoyer un message en se faisant passer pour n'importe quel
-# sender_id.
 # ============================================================
 @socketio.on('send_message')
 def handle_send_message(data):

@@ -46,9 +46,6 @@ def create_signalement():
 # ============================================================
 # Route : mise à jour du statut d'un signalement par un modérateur
 # (ex: passer de "en attente" à "traité" ou "rejeté")
-# Pas de vérification ici que l'appelant est bien un modérateur/admin :
-# n'importe quel utilisateur connaissant l'ID du signalement pourrait
-# potentiellement en changer le statut via cette route
 # ============================================================
 @bp_signalement.route('/api/signalement/<int:report_id>/status', methods=['PUT'])
 def update_signalement_status(report_id):
@@ -67,10 +64,6 @@ def update_signalement_status(report_id):
 
 # ============================================================
 # Route : liste complète des signalements, destinée au panel de modération
-# Pas de pagination ni de filtre (par statut, par type...) : sur une plateforme
-# avec beaucoup de signalements, cette route renverra une réponse de plus en plus lourde
-# Pas de vérification d'autorisation non plus : n'importe qui peut a priori
-# appeler cette route et voir tous les signalements, y compris les profils ciblés
 # ============================================================
 @bp_signalement.route('/api/signalement', methods=['GET'])
 def get_signalements():
