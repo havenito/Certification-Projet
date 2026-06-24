@@ -7,101 +7,105 @@ from routes.auth import validate_pseudo, validate_password, validate_subscriptio
 
 
 class TestValidatePseudo:
-    """Tests pour la fonction validate_pseudo"""
+    """
+    Cette suite de tests vérifie les règles de sécurité et de validation appliquées aux pseudos 
+    lors de l'inscription. L'objectif est d'isoler la fonction 'validate_pseudo' pour s'assurer 
+    qu'aucun pseudo incorrect, dangereux ou usurpé ne puisse être validé dans Minouverse.
+    """
     
     def test_valid_pseudo(self):
-        """Test avec un pseudo valide"""
+        """Cas nominal : Un pseudo standard (lettres/chiffres) doit passer sans erreur (None)"""
         result = validate_pseudo("testuser123")
         assert result is None
     
     def test_valid_pseudo_with_underscore(self):
-        """Test avec un pseudo valide contenant un underscore"""
+        """Vérifie que l'underscore (_) est bien accepté au milieu du pseudo"""
         result = validate_pseudo("test_user")
         assert result is None
     
     def test_valid_pseudo_with_dash(self):
-        """Test avec un pseudo valide contenant un tiret"""
+        """Vérifie que le tiret (-) est bien accepté au milieu du pseudo"""
         result = validate_pseudo("test-user")
         assert result is None
     
     def test_valid_pseudo_with_dot(self):
-        """Test avec un pseudo valide contenant un point"""
+        """Vérifie que le point (.) est bien accepté au milieu du pseudo"""
         result = validate_pseudo("test.user")
         assert result is None
     
     def test_empty_pseudo(self):
-        """Test avec un pseudo vide"""
+        """Vérifie la sécurité 'Champ obligatoire' : un pseudo vide doit renvoyer une erreur"""
         result = validate_pseudo("")
         assert result == "Le pseudo est requis."
     
     def test_none_pseudo(self):
-        """Test avec un pseudo None"""
+        """Sécurité anti-crash : si le front-end envoie une valeur null (None), on renvoie une erreur propre"""
         result = validate_pseudo(None)
         assert result == "Le pseudo est requis."
     
     def test_pseudo_too_short(self):
-        """Test avec un pseudo trop court (moins de 3 caractères)"""
+        """Vérifie la limite basse : un pseudo de moins de 3 caractères doit être refusé"""
         result = validate_pseudo("ab")
         assert result == "Le pseudo doit contenir au moins 3 caractères."
     
     def test_pseudo_too_long(self):
-        """Test avec un pseudo trop long (plus de 30 caractères)"""
+        """Vérifie la limite haute : évite l'injection de textes trop longs en BDD (max 30 caractères)"""
         long_pseudo = "a" * 31
         result = validate_pseudo(long_pseudo)
         assert result == "Le pseudo ne peut pas dépasser 30 caractères."
     
     def test_pseudo_with_special_chars(self):
-        """Test avec des caractères spéciaux non autorisés"""
+        """Sécurité injection/Clean code : bloque les caractères interdits comme l'arobase (@)"""
         result = validate_pseudo("test@user")
         assert "ne peut contenir que" in result
     
     def test_pseudo_with_space(self):
-        """Test avec un espace"""
+        """UX/Routage : bloque les espaces qui casseraient la structure des URLs (ex: minouverse.com/mon pseudo)"""
         result = validate_pseudo("test user")
         assert "ne peut contenir que" in result
     
     def test_pseudo_starts_with_dot(self):
-        """Test avec un pseudo commençant par un point"""
+        """Règle esthétique/technique : interdit de commencer par un point pour éviter des bugs d'affichage"""
         result = validate_pseudo(".testuser")
         assert "ne peut pas commencer ou finir" in result
     
     def test_pseudo_ends_with_dot(self):
-        """Test avec un pseudo finissant par un point"""
+        """Règle esthétique/technique : interdit de terminer par un point"""
         result = validate_pseudo("testuser.")
         assert "ne peut pas commencer ou finir" in result
     
     def test_pseudo_starts_with_dash(self):
-        """Test avec un pseudo commençant par un tiret"""
+        """Règle technique : interdit de commencer par un tiret"""
         result = validate_pseudo("-testuser")
         assert "ne peut pas commencer ou finir" in result
     
     def test_pseudo_starts_with_underscore(self):
-        """Test avec un pseudo commençant par un underscore"""
+        """Règle technique : interdit de commencer par un underscore"""
         result = validate_pseudo("_testuser")
         assert "ne peut pas commencer ou finir" in result
     
     def test_reserved_pseudo_login(self):
-        """Test avec un pseudo réservé (login)"""
+        """SÉCURITÉ CRITIQUE : Interdit d'utiliser 'login' comme pseudo pour ne pas casser les routes de l'application"""
         result = validate_pseudo("login")
         assert "réservé" in result.lower()
     
     def test_reserved_pseudo_admin(self):
-        """Test avec un pseudo réservé (admin)"""
+        """ANTI-USURPATION : Empêche un membre lambda de s'appeler 'admin' et de tromper les autres utilisateurs"""
         result = validate_pseudo("admin")
         assert "réservé" in result.lower()
     
     def test_reserved_pseudo_case_insensitive(self):
-        """Test que les pseudos réservés sont vérifiés sans tenir compte de la casse"""
+        """SÉCURITÉ DOUBLE : On s'assure que bloquer 'login' bloque AUSSI 'LOGIN' ou 'LogIn' (sensibilité à la casse)"""
         result = validate_pseudo("LOGIN")
         assert "réservé" in result.lower()
     
     def test_pseudo_exact_min_length(self):
-        """Test avec un pseudo de longueur minimale exacte (3 caractères)"""
+        """Test aux limites : On vérifie que la valeur limite exacte de 3 caractères fonctionne parfaitement"""
         result = validate_pseudo("abc")
         assert result is None
     
     def test_pseudo_exact_max_length(self):
-        """Test avec un pseudo de longueur maximale exacte (30 caractères)"""
+        """Test aux limites : On vérifie que la valeur limite exacte de 30 caractères fonctionne parfaitement"""
         pseudo = "a" * 30
         result = validate_pseudo(pseudo)
         assert result is None

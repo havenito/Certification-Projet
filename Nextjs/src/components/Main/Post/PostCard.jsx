@@ -62,25 +62,49 @@ const PostCard = ({ post, disableNavigation = false }) => {
     setShowMediaModal(true);
   };
 
-  // ── COUPE ET COLORE LES MENTIONS @PSEUDO (AJOUTÉ) ───────────────────────
+// ── COUPE ET COLORE LES MENTIONS @PSEUDO (AJOUTÉ) ───────────────────────
   const renderContentWithMentions = (content) => {
+    // Si le post n'a pas de texte, je m'arrête là pour éviter une erreur.
     if (!content) return '';
+    
+    /* FONCTIONNEment REGEX : /(@\w+)/g
+     * Le but ici, c'est de repérer tous les pseudos du texte pour les rendre cliquables.
+     * * Le motif : Je cherche un "@" suivi de caractères (\w comme des lettres ou des chiffres). 
+     * Le "+" dit de prendre tout le pseudo d'un coup, pas juste la première lettre.
+     * * Les parenthèses ( ) : C'est l'astuce la plus importante. Quand on utilise .split(), le repère 
+     * qui sert à couper est normalement supprimé. En mettant des parenthèses, je force JavaScript à 
+     * CONSERVER les mentions dans le tableau final au lieu de les jeter.
+     * * Le "g" : Signifie "Global". Ça me permet de scanner tout le texte pour attraper TOUTES les mentions du post.
+     * Au final, une phrase comme "Hello @thomas !" devient un tableau propre : ["Hello ", "@thomas", " !"]
+     */
     const parts = content.split(/(@\w+)/g);
+    
+    // Je parcours mon tableau morceau par morceau pour faire le tri
     return parts.map((part, index) => {
+      
+      // Si le morceau commence par un "@", j'ai trouvé une mention
       if (part.startsWith('@')) {
+        // Je retire le "@" (ex: "@luc" devient "luc") pour pouvoir construire l'URL de son profil
         const pseudo = part.slice(1);
+        
+        // Je transforme ce texte brut en un vrai lien Next.js stylisé en vert
         return (
           <Link
             key={index}
             href={`/${pseudo}`}
             className="text-green-400 hover:underline font-medium"
+            // J'arrête la propagation du clic ici. Comme ça, cliquer sur le pseudo va uniquement 
+            // sur son profil, sans ouvrir en même temps la page entière du post.
             onClick={(e) => e.stopPropagation()}
+            // Je pose ce badge pour indiquer à ma fonction handlePostClick que cette zone est interactive.
             data-interactive="true"
           >
-            {part}
+            {part} {/* J'affiche la mention (ex: @luc) */}
           </Link>
         );
       }
+      
+      // Si c'est du texte classique, je le retourne tel quel sans y toucher.
       return part;
     });
   };

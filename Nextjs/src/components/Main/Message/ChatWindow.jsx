@@ -47,12 +47,12 @@ export default function ChatWindow({
     if (socket) {
       socket.on('connect', () => {
         setConnectionStatus('connected');
-        console.log('🔌 WebSocket connected');
+        console.log(' WebSocket connected');
       });
       
       socket.on('disconnect', () => {
         setConnectionStatus('disconnected');
-        console.log('❌ WebSocket disconnected');
+        console.log(' WebSocket disconnected');
       });
       
       socket.on('new_message', handleNewMessage);
@@ -157,10 +157,20 @@ export default function ChatWindow({
       }
     }
   };
-
-  const handleSendMessage = async (content) => {
+/*
+   * Cette fonction sert à envoyer un message privé. Sa force, c'est qu'elle utilise le "Rendu Optimiste".
+   * Concrètement, au lieu d'attendre que le serveur réponde (ce qui créerait un temps de latence et donnerait 
+   * l'impression que l'application rame), j'affiche le message directement à l'écran en lui donnant un identifiant 
+   * temporaire (`tempId`) et un statut en attente (`isPending: true`). 
+   * Pour l'utilisateur, c'est instantané et ultra-fluide. Ensuite, mon code gère l'envoi en arrière-plan via 
+   * WebSocket (Socket.io) et possède même un plan B en HTTP classique si le réseau coupe. Dès que le serveur valide 
+   * le message, je remplace discrètement le faux message temporaire par le vrai enregistré en base de données.
+   */
+const handleSendMessage = async (content) => {
+    // 1. Je génère un identifiant unique temporaire côté client
     const tempId = `temp_${currentUser.id}_${Date.now()}_${Math.random()}`;
     
+    // 2. RENDU OPTIMISTE : Je crée un faux message "en attente" avec le texte tapé
     const tempMessage = {
       tempId: tempId,
       id: tempId,
@@ -168,12 +178,15 @@ export default function ChatWindow({
       content: content,
       send_at: new Date().toISOString(),
       conversation_id: conversation.conversation_id,
-      isPending: true
+      isPending: true // Ce drapeau me permet de l'afficher grisé ou avec un sablier
     };
     
+    // 3. AFFICHAGE INSTANTANÉ : Je l'injecte immédiatement dans l'interface.
+    // L'utilisateur a l'impression que l'app est ultra-rapide sans attendre la réponse du serveur.
     setMessages(prev => [...prev, tempMessage]);
     setPendingMessages(prev => new Map([...prev, [tempId, tempMessage]]));
 
+    // Ici commence la préparation pour le vrai envoi réseau...
     const messageData = {
       sender_id: currentUser.id,
       recipient_id: conversation.other_user.id,
